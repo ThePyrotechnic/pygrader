@@ -1,0 +1,35 @@
+{
+  "descriptor": "HW1d Grader",
+  "tests": {
+
+    "compile": {
+      "command": "g++",
+      "args": ["%s", "-o", "out"],
+      "single_file": true,
+      "print_output": false,
+      "point_val": 50,
+      "output_match": "error",
+      "negate_match": true
+    },
+    "test_sums": {
+      "command": "out.exe",
+      "print_output": true,
+      "numeric_match": [5.18738, 5.18738, 5.18738, 5.18738],
+      "point_val": 10
+    },
+    "test_float": {
+      "command": "out.exe",
+      "print_output": true,
+      "numeric_match": [9.53674, -7],
+      "exact_match": false,
+      "point_val": 20
+    },
+    "test_double": {
+      "command": "out.exe",
+      "print_output": true,
+      "numeric_match": [-8.88178, -16],
+      "exact_match": false,
+      "point_val": 20
+    }
+  }
+}

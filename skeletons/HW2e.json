@@ -1,0 +1,21 @@
+{
+  "descriptor": "HW2e Grader",
+  "tests": {
+
+    "test_1": {
+      "command": "g++",
+      "args": ["%s", "-o", "out"],
+      "print_output": true,
+      "point_val": 25,
+      "output_match": "error",
+      "negate_match": true
+    },
+    "test_2": {
+      "command": "out.exe",
+      "print_output": true,
+      "output_match": "120 120\n2004310016 2004310016\n5 5\n233 233\n20358520\n",
+      "exact_match": true,
+      "point_val": 75
+    }
+  }
+}

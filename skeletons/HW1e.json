@@ -1,0 +1,45 @@
+{
+  "descriptor": "HW1e Grader",
+  "tests": {
+
+    "compile": {
+      "command": "g++",
+      "args": ["%s", "-o", "out"],
+      "single_file": true,
+      "print_output": false,
+      "point_val": 50,
+      "output_match": "error",
+      "negate_match": true
+    },
+    "test_5": {
+      "command": "out.exe",
+      "input": "5",
+      "print_output": true,
+      "numeric_match": [120],
+      "point_val": 12.5
+    },
+    "test_10": {
+      "command": "out.exe",
+      "input": "10",
+      "print_output": true,
+      "numeric_match": [3628800],
+      "point_val": 12.5
+    },
+    "test_20": {
+      "command": "out.exe",
+      "input": "20",
+      "print_output": true,
+      "numeric_match": [-2102132736],
+      "exact_match": false,
+      "point_val": 12.5
+    },
+    "test_30": {
+      "command": "out.exe",
+      "input": "30",
+      "print_output": true,
+      "numeric_match": [1409286144],
+      "exact_match": false,
+      "point_val": 12.5
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "descriptor": "HW1c Grader",
+  "disarm": true,
+  "tests": {
+    "test_1": {
+      "command": "g++",
+      "args": ["%s", "-o", "out"],
+
+      "single_file": true,
+      "print_output": true,
+      "print_file": false,
+
+      "output_match": "error",
+      "negate_match": true,
+
+      "point_val": 25
+    },
+    "test_2": {
+      "command": "out.exe",
+      "print_output": true,
+
+      "output_match": "5050\n5050\n",
+      "exact_match": false,
+      "timeout": 5,
+      "point_val": 75
+    }
+  }
+}

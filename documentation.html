@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<style>
+    h1 {
+        font-size: xx-large;
+        font-family: sans-serif;
+    }
+
+    h2 {
+        font-family: sans-serif;
+    }
+
+    h4 {
+        font-family: sans-serif;
+        margin: 5px 4em;
+    }
+
+    .container {
+        margin: 10px 10px;
+        padding-bottom: 10px;
+        border-bottom: dashed;
+        border-color: #aaaaaa;
+    }
+
+    .item {
+        font-size: larger;
+        font-weight: bold;
+        font-family: sans-serif
+    }
+
+    .desc {
+        margin: 5px 2em;
+    }
+
+    .example {
+        display: inline;
+        margin-left: 4em;
+        padding: 1px 2px;
+        color: white;
+        background-color: dimgray;
+        font-family: Consolas, monospace;
+    }
+
+    .example-multiline {
+        display: flex;
+    }
+
+    .opt {
+        color: orange;
+    }
+
+    .none {
+        color: darkgoldenrod;
+    }
+
+    .false {
+        color: darkred;
+    }
+
+    .true {
+        color: darkgreen;
+    }
+
+</style>
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+<h1>Skeleton JSON file format</h1>
+
+<h2>Every Skeleton contains:</h2>
+<div class="container">
+    <div class="item">
+        "descriptor" - String
+    </div>
+    <div class="desc">
+        The name for this skeleton. Displayed when choosing a skeleton for an assignment.
+    </div>
+    <h4>Example:</h4>
+    <div class="example">
+        "descriptor": "HW1 Grader"
+    </div>
+</div>
+<div class="container">
+    <div class="item">
+        "tests" - Dictionary
+    </div>
+    <div class="desc">
+        The list of tests that this skeleton should run. See below for how to write tests.
+    </div>
+    <h4>Example:</h4>
+    <div class="example">
+        "tests": {
+        ...
+        }
+    </div>
+</div>
+<div class="container">
+    <div class="item">
+        "disarm" - Boolean <span class="opt">(Optional)</span> Default: <span class="false">false</span>
+    </div>
+    <div class="desc">
+        Whether to "disarm" this skeleton. A disarmed skeleton does not actually upload grades to Canvas, and does not send messages to users.
+    </div>
+    <h4>Example:</h4>
+    <div class="example">
+        "disarm": true
+    </div>
+</div>
+
+<h2>Every Test contains:</h2>
+<div class="container">
+    <div class="item">
+        "command" - String
+    </div>
+    <div class="desc">
+        The command to be run, surrounded by quotes (""). Do NOT include arguments! See below for how to include arguments.
+    </div>
+    <h4>Example:</h4>
+    <div class="example">
+        "command": "g++"
+    </div>
+</div>
+<div class="container">
+    <div class="item">
+        "args" - List <span class="opt">(Optional)</span> Default: <span class="none">none</span>
+    </div>
+    <div class="desc">
+        A list of arguments to be passed to the command for this test. Can use the filename wildcard
+    </div>
+    <h4>Example:</h4>
+    <div class="example">
+        "args": ["%s", "-o", "out"]
+    </div>
+</div>
+<div class="container">
+    <div class="item">
+        "input" - String <span class="opt">(Optional)</span> Default: <span class="none">none</span>
+    </div>
+    <div class="desc">
+        An input string to be passed to stdin for this test.
+    </div>
+    <h4>Example:</h4>
+    <div class="example">
+        "input": "25"
+    </div>
+</div>
+<div class="container">
+    <div class="item">
+        "timeout" - Integer <span class="opt">(Optional)</span> Default: <span class="none">none</span>
+    </div>
+    <div class="desc">
+        An optional timeout, in seconds, to be set for this test's command. If the command times out, then the test fails.
+    </div>
+    <h4>Example:</h4>
+    <div class="example">
+        "timeout": 5
+    </div>
+</div>
+<div class="container">
+    <div class="item">
+        "point_val" - Integer<span class="opt">(Optional)</span> Default: <span class="none">none</span>
+    </div>
+    <div class="desc">
+        A point value to be added to the student's total if the test passes. Can be negative.
+    </div>
+    <h4>Example:</h4>
+    <div class="example">
+        "point_val": 25
+    </div>
+</div>
+<div class="container">
+    <div class="item">
+        "target_file" - String <span class="opt">(Optional)</span> Default: <span class="none">none</span>
+    </div>
+    <div class="desc">
+        The filename that "%s" will be replaced with, if "%s" is found in the arguments list.
+    </div>
+    <h4>Example:</h4>
+    <div class="example">
+        "target_file": "MyClass.java"
+    </div>
+</div>
+<div class="container">
+    <div class="item">
+        "single_file" - Boolean <span class="opt">(Optional)</span> Default: <span class="false">false</span>
+    </div>
+    <div class="desc">
+        Whether to assume that the user's submission is a single file or not.<br/>
+        For information on how this is used, see "About the filename wildcard"
+    </div>
+    <h4>Example:</h4>
+    <div class="example">
+        "single_file": true
+    </div>
+</div>
+<div class="container">
+    <div class="item">
+        "ask_for_target" - Boolean <span class="opt">(Optional)</span> Default: <span class="false">false</span>
+    </div>
+    <div class="desc">
+        Whether to prompt for a file to replace %s" with.<br/>
+        This will ask the grader to choose from the files submitted by the student.
+    </div>
+    <h4>Example:</h4>
+    <div class="example">
+        "ask_for_target": true
+    </div>
+</div>
+<div class="container">
+    <div class="item">
+        "include_filetype" - Boolean <span class="opt">(Optional)</span> Default: <span class="true">true</span>
+    </div>
+    <div class="desc">
+        Whether to include or chop off the filetype extension when replacing the wildcard ("%s") with the student's file.
+    </div>
+    <h4>Example:</h4>
+    <div class="example">
+        "include_filetype: false
+    </div>
+</div>
+<div class="container">
+    <div class="item">
+        "print_file" - Boolean <span class="opt">(Optional)</span> Default: <span class="false">false</span>
+    </div>
+    <div class="desc">
+        Whether to print the student's file to the console.
+    </div>
+    <h4>Example:</h4>
+    <div class="example">
+        "print_file": true
+    </div>
+</div>
+<div class="container">
+    <div class="item">
+        "print_output" - Boolean <span class="opt">(Optional)</span> Default: <span class="false">false</span>
+    </div>
+    <div class="desc">
+        Whether to print the output of this test's command into the console.
+    </div>
+    <h4>Example:</h4>
+    <div class="example">
+        "print_output": true
+    </div>
+</div>
+<div class="container">
+    <div class="item">
+        "output_match" - String <span class="opt">(Optional)</span> Default: <span class="none">none</span>
+    </div>
+    <div class="desc">
+        A string that must be in the output of the command for the test to pass.<br/>
+        If "exact_match" is <span class="true">true</span>, this string must exactly match the output of the command, or the test will fail.<br/>
+        Note: If "output_regex" or "numeric_match" is set, this argument has no effect.
+    </div>
+    <h4>Example:</h4>
+    <div class="example">
+        "output_match": "Hawaii is the youngest state.\nThe sky is blue.\n"
+    </div>
+</div>
+<div class="container">
+    <div class="item">
+        "output_regex" - String <span class="opt">(Optional)</span> Default: <span class="none">none</span>
+    </div>
+    <div class="desc">
+        A regular expression that the output should satisfy for the test to pass.<br/>
+        Note: This overrides "output_match". If "numeric_match" is set, this argument has no effect.
+    </div>
+    <h4>Example:</h4>
+    <div class="example-multiline">
+        <div class="example">
+            //match an output string consisting of an even number of a's and an odd number of b's<br/>
+            "output_regex": "^(aa)*(bb)*b$"
+        </div>
+    </div>
+</div>
+<div class="container">
+    <div class="item">
+        "numeric_match" - Array <span class="opt">(Optional)</span> Default: <span class="none">none</span>
+    </div>
+    <div class="desc">
+        A list of numbers that must ALL be found somewhere in the command's output for the test to pass.<br/    >
+        Numbers can be duplicated if they must be found more than once.<br/>
+        A number can be denoted in three ways:<br/>
+        <ol>
+            <li>As an exact number (e.g. 3.14)</li>
+            <li>As an array denoting a range (e.g. [2, 2.5])</li>
+            <li>As a string denoting a number plus/minus the second number (e.g. "10, 0.0001" is the same as [9.9999, 10.0001])</li>
+        </ol>
+        Note: This overrides "outut_regex" and "output_match".
+    </div>
+    <h4>Example:</h4>
+    <div class="example">
+        "numeric_match": [200, -33.333, [8.5, 9], "-50,0.5"]
+    </div>
+</div>
+<div class="container">
+    <div class="item">
+        "negate_match" - Boolean <span class="opt">(Optional)</span> Default: <span class="falsse">false</span>
+    </div>
+    <div class="desc">
+        Whether to negate the result of the output comparison ("numeric_match", "output_regex", or "output_match; whichever was specified)<br/>
+        In other words: if the output comparison fails, the test passes. If the comparison succeeds, the test fails.
+    </div>
+    <h4>Example:</h4>
+    <div class="example">
+        "negate_match": true
+    </div>
+</div>
+<div class="container">
+    <div class="item">
+        "exact_match" - Boolean <span class="opt">(Optional)</span> Default: <span class="false">false</span>
+    </div>
+    <div class="desc">
+        Only used with "output_match". Whether the string must be an exact match, or if it just needs to be found somewhere in the output.
+    </div>
+    <h4>Example:</h4>
+    <div class="example">
+        "exact_match": true
+    </div>
+</div>
+<div class="container">
+    <div class="item">
+        "fail_notif" - Dictionary <span class="opt">(Optional)</span> Default: <span class="none">none</span>
+    </div>
+    <div class="desc">
+        This message will be sent to the student if the fest fails.<br/>
+        Consists of a dictionary containing a "body" string and an optional "subject" string.<br/>
+        The message will be sent from your Canvas account, as though you had manually started a conversation with the student.
+    </div>
+    <h4>Example:</h4>
+    <div class="example-multiline">
+        <div class="example">
+            "fail_notif": {<br/>
+              &nbsp;&nbsp;"subject": "Test failed"<br/>
+              &nbsp;&nbsp;"body": "Your submission failed a test!\nYou may re-submit this assignment"<br/>
+            }
+        </div>
+    </div>
+</div>
+
+<h3>About the filename wildcard ("%s"):</h3>
+<p>
+    The filename wildcard ("%s") can be used to denote a filename in the current student's submission.<br/>
+    If no filename is explicitly given with the "target_file" parameter, the following logic is used to replace "%s":<br/>
+</p>
+<ol>
+    <li>If the "single_file" parameter is <span class="true">true</span>, then the first file which the user submitted will be chosen to replace "%s", regardless of how many files they submitted.</li>
+    <li>If the "single_file" parameter is not set or is <span class="false">false</span>, but the user has only submitted one file, then that file is chosen to replace "%s".</li>
+    <li>If "ask_for_target" is set then the program will ask the grader to chose a file from a list of all the files that the current user submitted.</li>
+    <li>Finally, if none of these conditions can be satisfied, "%s" is left as-is and the command will probably not work as expected.</li>
+</ol>
+</body>
+</html>
+<!--
+<div class="container">
+    <div class="item">
+        <span class="opt">(Optional)</span> Default: <span class=""></span>
+    </div>
+    <div class="desc">
+
+    </div>
+    <h4>Example:</h4>
+    <div class="example">
+
+    </div>
+</div>
+-->
