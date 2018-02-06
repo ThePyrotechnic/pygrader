@@ -32,13 +32,16 @@ import re
 import shutil
 import subprocess
 import sys
+import importlib
+from importlib import util
 from typing import Callable, Dict, List, Sequence, Tuple, TypeVar
 
 # 3rd-party
 import attr
-import py
 import requests
 import toml
+if importlib.util.find_spec('py'):
+    import py
 
 # globals
 DISARM_ALL = False
