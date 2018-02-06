@@ -53,7 +53,7 @@ NUM_REGEX = re.compile(r'-?\d+\.\d+|-?\d+')
 
 
 # TODO determine whether or not should be capitalized
-Enrollment = Enum('Enrollment', 'teacher student ta observer designer')
+Enrollment = Enum('Enrollment', ['teacher', 'student', 'ta', 'observer', 'designer'])
 T = TypeVar('T')
 
 
@@ -686,8 +686,10 @@ def main():
             print('Unable to leave current directory')
             exit(1)
 
-    with open('failures.json', 'w') as failures_file:
-        json.dump(failures, failures_file)
+    if len(failures) > 1:
+        with open('failures.json', 'w') as failures_file:
+            json.dump(failures, failures_file)
+
     print('Finished grading all submissions for this assignment')
 
 
