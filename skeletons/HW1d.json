@@ -12,7 +12,7 @@
       "negate_match": true
     },
     "test_sums": {
-      "command": "out.exe",
+      "command": "out.exe ",
       "print_output": true,
       "numeric_match": [5.18738, 5.18738, 5.18738, 5.18738],
       "point_val": 10
