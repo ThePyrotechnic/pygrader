@@ -510,6 +510,48 @@ def init_tempdir():
         exit(1)
 
 
+def open_file(filename: str):
+    try:
+        file = open(filename)
+    except (FileNotFoundError, IOError):
+        return None
+    else:
+        return file
+
+
+def load_prefs() -> dict:
+    prefs_file = open_file('preferences.toml')
+    pref_vals = {}
+    if prefs_file:
+        try:
+            pref_vals = toml.load(prefs_file)
+        except toml.TomlDecodeError:
+            print('Preferences file is invalid. Is it valid TOML?')
+
+    prefs = {
+                'session': pref_vals.get('session') if pref_vals.get('session') else {},
+                'quickstart': pref_vals.get('quickstart') if pref_vals.get('quickstart') else {}
+            }
+
+    return prefs
+
+
+def choose_course(course_list) -> int:
+    return choose(
+        course_list,
+        'Choose a course from the following list:',
+        formatter=lambda c: '%s (%s)' % (c.get('name'), c.get('course_code'))
+    ).get('id')
+
+
+def choose_assignment(assignment_list) -> int:
+    return choose(
+        assignment_list,
+        'Choose an assignment to grade:',
+        formatter=lambda assignment: assignment.get('name')
+    ).get('id')
+
+
 def choose(
         choices: Sequence[T],
         message: str = None,
@@ -535,50 +577,69 @@ def choose(
     return choices[i - 1]
 
 
-def startup(grader: PyCanvasGrader) -> (int, int):
-    selected_role = getattr(Enrollment, choose(
-        ['teacher', 'ta'],
-        'Choose a class role to filter by:'
-    ))
+def startup(grader: PyCanvasGrader, prefs: dict) -> (int, int):
+    prefs = load_prefs()
+    session = prefs['session']
+    quickstart = prefs['quickstart']
+
+    try:
+        selected_role = Enrollment[quickstart.get('role')]
+    except KeyError:
+        selected_role = getattr(Enrollment, choose(
+            ['teacher', 'ta'],
+            'Choose a class role to filter by:'
+        ))
 
     course_list = grader.courses(selected_role)
     if len(course_list) < 1:
-        input('No courses were found. Press enter to restart')
+        input('No courses were found for the selected role. Press enter to restart')
         restart_program(grader)
 
-    # Have user select course
-    course_id = choose(
-        course_list,
-        'Choose a course from the following list:',
-        formatter=lambda course: '%s (%s)' % (course.get('name'), course.get('course_code'))
-    ).get('id')
-    print('Show only ungraded assignments? (y or n):')
-    ungraded = choose_bool()
-    assignment_list = grader.assignments(course_id, ungraded=ungraded)
+    course_id = quickstart.get('course_id')
+    if not course_id or not type(course_id) == int:
+        course_id = choose_course(course_list)
+    else:
+        # must validate course_id from preferences file
+        valid = True in (c.get('id') == course_id for c in course_list)
+        if not valid:
+            course_id = choose_course(course_list)
 
+    ungraded = session.get('only_show_ungraded')
+    if ungraded is None:
+        print('Show only ungraded assignments? (y or n):')
+        ungraded = choose_bool()
+
+    assignment_list = grader.assignments(course_id, ungraded=ungraded)
     if len(assignment_list) < 1:
         input('No assignments were found. Press enter to restart')
         restart_program(grader)
 
-    # Have user choose assignment
-    assignment_id = choose(
-        assignment_list,
-        'Choose an assignment to grade:',
-        formatter=lambda assignment: assignment.get('name')
-    ).get('id')
+    assignment_id = quickstart.get('assignment_id')
+    if not assignment_id or not type(assignment_id) == int:
+        assignment_id = choose_assignment(assignment_list)
+    else:
+        # must validate assignment_id from preferences file
+        valid = True in (a.get('id') == assignment_id for a in assignment_list)
+        if not valid:
+            assignment_id = choose_assignment(assignment_list)
 
     return course_id, assignment_id
 
 
-def grade_assignment(grader: PyCanvasGrader, course_id: int, assignment_id: int):
+def grade_assignment(grader: PyCanvasGrader, prefs: dict, course_id: int, assignment_id: int):
+    session = prefs['session']
+
     # Get list of submissions for this assignment
     submission_list = grader.submissions(course_id, assignment_id)
     if len(submission_list) < 1:
         input('There are no submissions for this assignment. Press enter to restart')
         restart_program(grader)
 
-    print('Only grade currently ungraded submissions? (y or n):')
-    ungraded_only = choose_bool()
+    ungraded_only = session.get('only_grade_ungraded')
+    if ungraded_only is None:
+        print('Only grade currently ungraded submissions? (y or n):')
+        ungraded_only = choose_bool()
+
     # Match the user IDs found in the zip with the IDs in the online submission
     user_submission_dict = {}
     for submission in submission_list:
@@ -596,11 +657,12 @@ def grade_assignment(grader: PyCanvasGrader, course_id: int, assignment_id: int)
         input('Could not download any submissions. Press enter to restart')
         restart_program(grader)
 
-    s = 's' if user_submission_dict else ''
-    print('Successfully retrieved %i submission%s. Is this correct? (y or n):' % (len(user_submission_dict), s))
-    correct = choose_bool()
-    if not correct:
-        restart_program(grader)
+    if session.get('verify_submission_count'):
+        s = 's' if user_submission_dict else ''
+        print('Successfully retrieved %i submission%s. Is this correct? (y or n):' % (len(user_submission_dict), s))
+        correct = choose_bool()
+        if not correct:
+            restart_program(grader)
 
     skeleton_list = parse_skeletons()
     if len(skeleton_list) < 1:
@@ -698,8 +760,10 @@ def main():
     init_tempdir()
     # Initialize grading session and fetch courses
     grader = PyCanvasGrader()
-    course_id, assignment_id = startup(grader)
-    grade_assignment(grader, course_id, assignment_id)
+
+    prefs = load_prefs()
+    course_id, assignment_id = startup(grader, prefs)
+    grade_assignment(grader, prefs, course_id, assignment_id)
 
 
 if __name__ == '__main__':
