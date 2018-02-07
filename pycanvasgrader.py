@@ -460,6 +460,7 @@ class TestSkeleton:
         return total_score, failures
 
 
+
 def choose_val(hi_num: int, allow_zero: bool = False) -> int:
     for val in iter(input, None):
         if not val.isdigit():
@@ -534,15 +535,7 @@ def choose(
     return choices[i - 1]
 
 
-def main():
-    if sys.version_info < (3, 5):
-        print('Python 3.5+ is required')
-        exit(1)
-
-    init_tempdir()
-    # Initialize grading session and fetch courses
-    grader = PyCanvasGrader()
-
+def startup(grader: PyCanvasGrader) -> (int, int):
     selected_role = getattr(Enrollment, choose(
         ['teacher', 'ta'],
         'Choose a class role to filter by:'
@@ -574,6 +567,10 @@ def main():
         formatter=lambda assignment: assignment.get('name')
     ).get('id')
 
+    return course_id, assignment_id
+
+
+def grade_assignment(grader: PyCanvasGrader, course_id: int, assignment_id: int):
     # Get list of submissions for this assignment
     submission_list = grader.submissions(course_id, assignment_id)
     if len(submission_list) < 1:
@@ -691,6 +688,18 @@ def main():
             json.dump(failures, failures_file)
 
     print('Finished grading all submissions for this assignment')
+
+
+def main():
+    if sys.version_info < (3, 5):
+        print('Python 3.5+ is required')
+        exit(1)
+
+    init_tempdir()
+    # Initialize grading session and fetch courses
+    grader = PyCanvasGrader()
+    course_id, assignment_id = startup(grader)
+    grade_assignment(grader, course_id, assignment_id)
 
 
 if __name__ == '__main__':

@@ -1,0 +1,7 @@
+[session]
+    prompt_to_save = true
+
+[quickstart]
+    role = 'teacher'
+    class_id = 133
+    
