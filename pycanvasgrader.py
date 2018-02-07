@@ -513,9 +513,9 @@ def load_prefs() -> dict:
 
     # To simplify logic in the main functions, prefs['known_category'] is always defined
     prefs = {
-                'session': pref_vals.get('session') if pref_vals.get('session') else {},
-                'quickstart': pref_vals.get('quickstart') if pref_vals.get('quickstart') else {}
-            }
+        'session': pref_vals.get('session', {}),
+        'quickstart': pref_vals.get('quickstart', {})
+    }
 
     return prefs
 
@@ -591,12 +591,12 @@ def startup(grader: PyCanvasGrader, prefs: dict) -> (int, int):
     quickstart = prefs['quickstart']
 
     try:
-        selected_role = Enrollment[quickstart.get('role')]
+        selected_role = Enrollment[quickstart.get('role').lower()]
     except KeyError:
-        selected_role = getattr(Enrollment, choose(
+        selected_role = Enrollment[choose(
             ['teacher', 'ta'],
             'Choose a class role to filter by:'
-        ))
+        )]
 
     course_list = grader.courses(selected_role)
     if len(course_list) < 1:
@@ -604,11 +604,11 @@ def startup(grader: PyCanvasGrader, prefs: dict) -> (int, int):
         restart_program(grader)
 
     course_id = quickstart.get('course_id')
-    if not course_id or not type(course_id) == int:
+    if not course_id or not isinstance(course_id, int):
         course_id = choose_course(course_list)
     else:
         # must validate course_id from preferences file
-        valid = True in (c.get('id') == course_id for c in course_list)
+        valid = any(c.get('id') == course_id for c in course_list)
         if not valid:
             course_id = choose_course(course_list)
 
