@@ -460,23 +460,6 @@ class TestSkeleton:
         return total_score, failures
 
 
-
-def choose_val(hi_num: int, allow_zero: bool = False) -> int:
-    for val in iter(input, None):
-        if not val.isdigit():
-            continue
-
-        i = int(val)
-        if i in range(0 if allow_zero else 1, hi_num):
-            return i
-
-
-def choose_bool() -> bool:
-    for b in iter(input, None):
-        if b.lower() in {'y', 'n', 'yes', 'no'}:
-            return b.startswith(('y', 'Y'))
-
-
 def parse_skeletons() -> list:
     """
     Responsible for validating and parsing the skeleton files in the "skeletons" directory
@@ -510,9 +493,9 @@ def init_tempdir():
         exit(1)
 
 
-def open_file(filename: str):
+def open_file(filename: str, mode: str = 'r'):
     try:
-        file = open(filename)
+        file = open(filename, mode=mode)
     except (FileNotFoundError, IOError):
         return None
     else:
@@ -528,12 +511,22 @@ def load_prefs() -> dict:
         except toml.TomlDecodeError:
             print('Preferences file is invalid. Is it valid TOML?')
 
+    # To simplify logic in the main functions, prefs['known_category'] is always defined
     prefs = {
                 'session': pref_vals.get('session') if pref_vals.get('session') else {},
                 'quickstart': pref_vals.get('quickstart') if pref_vals.get('quickstart') else {}
             }
 
     return prefs
+
+
+def save_prefs(prefs: dict, new_prefs: dict):
+    prefs = {**prefs, **new_prefs}
+    try:
+        with open('preferences.toml', mode='w') as prefs_file:
+            toml.dump(prefs, prefs_file)
+    except IOError:
+        print('Unable to write preferences.toml')
 
 
 def choose_course(course_list) -> int:
@@ -550,6 +543,22 @@ def choose_assignment(assignment_list) -> int:
         'Choose an assignment to grade:',
         formatter=lambda assignment: assignment.get('name')
     ).get('id')
+
+
+def choose_val(hi_num: int, allow_zero: bool = False) -> int:
+    for val in iter(input, None):
+        if not val.isdigit():
+            continue
+
+        i = int(val)
+        if i in range(0 if allow_zero else 1, hi_num):
+            return i
+
+
+def choose_bool() -> bool:
+    for b in iter(input, None):
+        if b.lower() in {'y', 'n', 'yes', 'no'}:
+            return b.startswith(('y', 'Y'))
 
 
 def choose(
@@ -578,7 +587,6 @@ def choose(
 
 
 def startup(grader: PyCanvasGrader, prefs: dict) -> (int, int):
-    prefs = load_prefs()
     session = prefs['session']
     quickstart = prefs['quickstart']
 
@@ -603,6 +611,12 @@ def startup(grader: PyCanvasGrader, prefs: dict) -> (int, int):
         valid = True in (c.get('id') == course_id for c in course_list)
         if not valid:
             course_id = choose_course(course_list)
+
+    if session.get('prompt_to_save') and \
+            (not quickstart.get('course_id') or not quickstart.get('role')):
+        print('Save these settings for faster startup next time? (y or n):')
+        if choose_bool():
+            save_prefs(prefs, {'quickstart': {'role': selected_role.name, 'course_id': course_id}})
 
     ungraded = session.get('only_show_ungraded')
     if ungraded is None:

@@ -1,16 +1,9 @@
 [session]
-    prompt_to_save = true
-
-    # ----
-    # comment out any variables below this line in order to be prompted for their value each time.
-    # ----
-    only_show_ungraded = false
-    only_grade_ungraded = false
-    verify_submission_count = false
-
+prompt_to_save = true
+only_show_ungraded = false
+only_grade_ungraded = false
+verify_submission_count = false
 
 [quickstart]
-    #You will be promtped for any variables not included below
-    #role = 'teacher'
-    #course_id = 133
-    #assignment_id = 89948
+role = "teacher"
+course_id = 133
