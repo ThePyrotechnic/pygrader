@@ -33,6 +33,7 @@ import shutil
 import subprocess
 import sys
 import importlib
+from datetime import datetime
 from importlib import util
 from typing import Callable, Dict, List, Sequence, Tuple, TypeVar
 
@@ -536,7 +537,8 @@ def choose_course(course_list) -> int:
     return choose(
         course_list,
         'Choose a course from the following list:',
-        formatter=lambda c: '%s (%s)' % (c.get('name'), c.get('course_code'))
+        formatter=lambda c: '%s (%s)' % (c.get('name'),
+                                         datetime.strptime(c['start_at'], '%Y-%m-%dT%H:%M:%SZ').strftime('%b %Y'))
     ).get('id')
 
 
