@@ -33,6 +33,7 @@ import shutil
 import subprocess
 import sys
 import importlib
+from datetime import datetime
 from importlib import util
 from typing import Callable, Dict, List, Sequence, Tuple, TypeVar
 
@@ -531,12 +532,17 @@ def save_prefs(prefs: dict, new_prefs: dict):
     except IOError:
         print('Unable to write preferences.toml')
 
+        
+def month_year(time_string: str) -> str:
+    dt = datetime.strptime(time_string, '%Y-%m-%dT%H:%M:%SZ')
+    return dt.strftime('%b %Y')
+
 
 def choose_course(course_list) -> int:
     return choose(
         course_list,
         'Choose a course from the following list:',
-        formatter=lambda c: '%s (%s)' % (c.get('name'), c.get('course_code'))
+        formatter=lambda c: '%s (%s)' % (c.get('name'), month_year(c['start_at']))
     ).get('id')
 
 
