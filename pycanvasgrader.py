@@ -532,13 +532,17 @@ def save_prefs(prefs: dict, new_prefs: dict):
     except IOError:
         print('Unable to write preferences.toml')
 
+        
+def month_year(time_string: str) -> str:
+    dt = datetime.strptime(time_string, '%Y-%m-%dT%H:%M:%SZ')
+    return dt.strftime('%b %Y')
+
 
 def choose_course(course_list) -> int:
     return choose(
         course_list,
         'Choose a course from the following list:',
-        formatter=lambda c: '%s (%s)' % (c.get('name'),
-                                         datetime.strptime(c['start_at'], '%Y-%m-%dT%H:%M:%SZ').strftime('%b %Y'))
+        formatter=lambda c: '%s (%s)' % (c.get('name'), month_year(c['start_at']))
     ).get('id')
 
 
