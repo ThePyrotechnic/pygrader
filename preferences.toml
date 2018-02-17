@@ -7,3 +7,4 @@ verify_submission_count = false
 [quickstart]
 role = "teacher"
 course_id = 133
+skeleton = "HW1d.json"

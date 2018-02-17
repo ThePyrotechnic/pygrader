@@ -34,12 +34,15 @@ import subprocess
 import sys
 import importlib
 from importlib import util
+from numbers import Real
 from typing import Callable, Dict, List, Sequence, Tuple, TypeVar
 
 # 3rd-party
 import attr
+import math
 import requests
 import toml
+
 if importlib.util.find_spec('py'):
     import py
 
@@ -89,7 +92,8 @@ class PyCanvasGrader:
                     if len(token) > 2:
                         return token
         except FileNotFoundError:
-            print("Could not find an access.token file. You must place your Canvas OAuth token in a file named 'access.token', in this directory.")
+            print(
+                "Could not find an access.token file. You must place your Canvas OAuth token in a file named 'access.token', in this directory.")
             exit(1)
 
     def close(self):
@@ -126,7 +130,8 @@ class PyCanvasGrader:
         :param assignment_id: The ID of the assignment
         :return: A list of the assignment's submissions
         """
-        url = 'https://sit.instructure.com/api/v1/courses/' + str(course_id) + '/assignments/' + str(assignment_id) + '/submissions?per_page=100'
+        url = 'https://sit.instructure.com/api/v1/courses/' + str(course_id) + '/assignments/' + str(
+            assignment_id) + '/submissions?per_page=100'
 
         response = self.session.get(url)
         final_response = json.loads(response.text)
@@ -318,10 +323,12 @@ class AssignmentTest:
             else:
                 command_to_send = command
             if sys.version_info[1] == 5:
-                proc = subprocess.run(command_to_send, input=self.input_str, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=self.timeout, shell=True)
+                proc = subprocess.run(command_to_send, input=self.input_str, stdout=subprocess.PIPE,
+                                      stderr=subprocess.STDOUT, timeout=self.timeout, shell=True)
 
             else:
-                proc = subprocess.run(command_to_send, input=self.input_str, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=self.timeout, encoding='UTF-8', shell=True)
+                proc = subprocess.run(command_to_send, input=self.input_str, stdout=subprocess.PIPE,
+                                      stderr=subprocess.STDOUT, timeout=self.timeout, encoding='UTF-8', shell=True)
 
         except subprocess.TimeoutExpired:
             return {'timeout': True}
@@ -463,6 +470,29 @@ class TestSkeleton:
         return total_score, failures
 
 
+@attr.s
+class User:
+    user_id = attr.ib(type=int)
+    submission_id = attr.ib(type=int)
+    name = attr.ib(type=str)
+    email = attr.ib(type=str)
+    grade = attr.ib(type=Real)
+    submitted = attr.ib(type=bool)
+
+    def __str__(self):
+        grade = 'ungraded' if self.grade is None else self.grade
+        submitted = 'posted' if self.submitted else 'not posted'
+        return '{} ({}): {} [{}]'.format(self.name, self.email, grade, submitted)
+
+
+def parse_skeleton(skeleton_file: str) -> TestSkeleton:
+    """
+    Parse a single TestSkeleton
+    :return: The parsed skeleton, or None if parsing failed
+    """
+    return TestSkeleton.from_file(skeleton_file)
+
+
 def parse_skeletons() -> list:
     """
     Responsible for validating and parsing the skeleton files in the "skeletons" directory
@@ -470,7 +500,7 @@ def parse_skeletons() -> list:
     """
     skeleton_list = []
     for skeleton_file in os.listdir('skeletons'):
-        skeleton = TestSkeleton.from_file(skeleton_file)
+        skeleton = parse_skeleton(skeleton_file)
         if skeleton is not None:
             skeleton_list.append(skeleton)
     return skeleton_list
@@ -564,29 +594,78 @@ def choose_bool() -> bool:
             return b.startswith(('y', 'Y'))
 
 
+def list_choices(
+        choices: Sequence[T],
+        message: str = None,
+        formatter: Callable[[T], str] = str,
+        msg_below: bool = False,
+        start_at: int = 1):
+
+    if not msg_below and message is not None:
+        print(message)
+
+    for i, choice in enumerate(choices, start_at):
+        print(i, formatter(choice), sep='.\t')
+
+    if msg_below and message is not None:
+        print(message)
+
+
 def choose(
         choices: Sequence[T],
         message: str = None,
-        formatter: Callable[[T], str] = str) -> T:
+        formatter: Callable[[T], str] = str,
+        msg_below: bool = False) -> T:
     """
     Display the contents of a sequence and have the user enter a 1-based
     index for their selection.
 
     Takes an optional message to print before showing the choices
     """
-    if message is not None:
-        print(message)
-    for i, choice in enumerate(choices, 1):
-        print(i, formatter(choice), sep='.\t')
+    list_choices(choices, message, formatter, msg_below)
 
-    i = -1
-    while i not in range(1, len(choices) + 1):
-        try:
-            i = int(input())
-        except (TypeError, ValueError):
-            continue
-
+    i = choose_val(len(choices) + 1, False)
     return choices[i - 1]
+
+
+def grade_all_submissions(grader: PyCanvasGrader, users: list, only_ungraded: bool = False):
+    pass
+
+
+def user_menu(grader: PyCanvasGrader, user: User):
+    pass
+
+
+def main_menu(grader: PyCanvasGrader, users: list):
+    list_choices(users)
+
+    options = [
+        'Grade all submissions',
+        'Grade only ungraded submissions',
+        'Submit all grades',
+        'Cancel'
+    ]
+
+    list_choices(options,
+                 ('Choose a user to work with that user individually.\n'
+                  'Alternatively, you may enter an action from the menu above.'),
+                 msg_below=True,
+                 start_at=len(users) + 1)
+
+    choice = choose_val(len(options) + len(users))
+
+    if choice > len(users):
+        user_menu(grader, users[choice - 1])
+    else:
+        selection = options[choice - 1]
+        if selection == options[0]:
+            grade_all_submissions(grader, users)
+        elif selection == options[1]:
+            grade_all_submissions(grader, users, only_ungraded=True)
+        elif selection == options[2]:
+            submit_all_grades(grader, users)
+        elif selection == options[3]:
+            close_grader()
 
 
 def startup(grader: PyCanvasGrader, prefs: dict) -> (int, int):
@@ -644,6 +723,53 @@ def startup(grader: PyCanvasGrader, prefs: dict) -> (int, int):
 
 
 def grade_assignment(grader: PyCanvasGrader, prefs: dict, course_id: int, assignment_id: int):
+    session = prefs['session']
+    quickstart = prefs['quickstart']
+
+    # Get list of submissions for this assignment
+    submission_list = grader.submissions(course_id, assignment_id)
+    if len(submission_list) < 1:
+        input('There are no submissions for this assignment. Press enter to restart')
+        restart_program(grader)
+
+    ungraded_only = session.get('only_grade_ungraded')
+    if ungraded_only is None:
+        print('Only grade currently ungraded submissions? (y or n):')
+        ungraded_only = choose_bool()
+
+    # Create users from submissions
+    users = []
+    for submission in submission_list:
+        if ungraded_only and submission['grader_matches_current_submission'] and submission['score'] is not None:
+            continue
+        user_id = submission.get('user_id')
+        if submission.get('attachments') is not None:
+            if grader.download_submission(submission, os.path.join('temp', str(user_id))):
+                user_data = grader.user(course_id, user_id)
+                users.append(User(user_id, submission['id'], user_data['name'], user_data.get('email'),
+                                  submission['score'], submission['grade_matches_current_submission']))
+            else:
+                pass
+
+    selected_skeleton = None
+    if quickstart.get('skeleton'):
+        selected_skeleton = parse_skeleton(quickstart.get('skeleton'))
+
+    if selected_skeleton is None:
+        skeleton_list = parse_skeletons()
+        selected_skeleton = choose(
+            skeleton_list,
+            'Choose a skeleton to use for grading this assignment:',
+            formatter=lambda skel: skel.descriptor
+        )
+
+    # Display main menu
+    main_menu(users)
+
+    print('done')
+
+
+def grade_assignment_legacy(grader: PyCanvasGrader, prefs: dict, course_id: int, assignment_id: int):
     session = prefs['session']
 
     # Get list of submissions for this assignment
