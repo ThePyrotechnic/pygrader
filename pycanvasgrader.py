@@ -182,8 +182,10 @@ class PyCanvasGrader:
 
     def grade_submission(self, course_id, assignment_id, user_id, grade):
         global DISARM_ALL, DISARM_GRADER
-        url = 'https://sit.instructure.com/api/v1/courses/%i/assignments/%i/submissions/%i/?submission[posted_grade]=%i' \
-              % (course_id, assignment_id, user_id, grade)
+        if grade is None:
+            grade = 'NaN'
+        url = 'https://sit.instructure.com/api/v1/courses/%i/assignments/%i/submissions/%i/?submission[posted_grade]=%s' \
+              % (course_id, assignment_id, user_id, str(grade))
 
         if DISARM_ALL or DISARM_GRADER:
             print('Grader disarmed; grade will not actually be submitted')
@@ -289,7 +291,7 @@ class AssignmentTest:
             'Select a file for the "%s" command:' % command
         ).name
 
-    def run(self) -> dict:
+    def run(self, user: 'User') -> dict:
         """
         Runs the Command
         :return: A dictionary containing the command's return code, stdout, and stderr
@@ -309,10 +311,11 @@ class AssignmentTest:
             filename = os.path.splitext(filename)[0]
         if filename is not None:
             if self.print_file:
-                print('--FILE--')
+                user.log += '--FILE--\n'
                 with open(filename, 'r') as f:
-                    shutil.copyfileobj(f, sys.stdout)
-                print('--END FILE--')
+                    file_as_str = f.read()
+                    user.log += file_as_str
+                user.log += '--END FILE--\n'
             command = self.command.replace('%s', filename)
             if args is not None:
                 args = [arg.replace('%s', filename) for arg in args]
@@ -334,22 +337,22 @@ class AssignmentTest:
             return {'timeout': True}
         return {'returncode': proc.returncode, 'stdout': proc.stdout, 'stderr': proc.stderr}
 
-    def run_and_match(self) -> bool:
+    def run_and_match(self, user: 'User') -> bool:
         """
         Runs the command and matches the output to the output_match/regex. If neither are defined then this always returns true
         :return: Whether the output matched or not
         """
         global NUM_REGEX
 
-        result = self.run()
+        result = self.run(user)
 
         if result.get('timeout'):
             return False
 
         if self.print_output:
-            print('\t--OUTPUT--')
-            print(result['stdout'])
-            print('\t--END OUTPUT--')
+            user.log += '\t--OUTPUT--\n'
+            user.log += result['stdout']
+            user.log += '\n\t--END OUTPUT--\n'
         if not any((self.output_match, self.output_regex, self.numeric_match)):
             return True
 
@@ -377,7 +380,7 @@ class AssignmentTest:
 
         if self.output_regex:
             if self.output_regex.match(result['stdout']):
-                print('--Matched regular expression--')
+                user.log += '--Matched regular expression--\n'
                 if self.negate_match:
                     return False
                 return True
@@ -389,7 +392,7 @@ class AssignmentTest:
                 condition = self.output_match in result['stdout']
 
             if condition:
-                print('--Matched string comparison--')
+                user.log += '--Matched string comparison--\n'
                 if self.negate_match:
                     return False
                 return True
@@ -437,25 +440,35 @@ class TestSkeleton:
 
                 return TestSkeleton(descriptor, test_list, disarm)
 
-    def run_tests(self, grader: PyCanvasGrader, user_id: int) -> Tuple[int, Dict]:
+    def run_tests(self, grader: PyCanvasGrader, user: 'User') -> Tuple[int, Dict]:
         global DISARM_ALL
         DISARM_ALL = self.disarm
+
+        user_id = user.user_id
 
         total_score = 0
         failures = {}
 
+        user.log = ''
+
+        try:
+            os.chdir(os.path.join('temp', str(user_id)))
+        except (WindowsError, OSError):
+            user.log += 'Could not access files for user "%i". Skipping\n' % user_id
+            return None
+
         for count, test in enumerate(self.tests, 1):
-            print('\n--Running test %i--' % count)
-            if test.run_and_match():
+            user.log += '\n--Running test %i--\n' % count
+            if test.run_and_match(user):
                 if test.point_val > 0:
-                    print('--Adding %i points--' % test.point_val)
+                    user.log += '--Adding %i points--\n' % test.point_val
                 elif test.point_val == 0:
-                    print('--No points set for this test--')
+                    user.log += '--No points set for this test--\n'
                 else:
-                    print('--Subtracting %i points--' % abs(test.point_val))
+                    user.log += '--Subtracting %i points--\n' % abs(test.point_val)
                 total_score += test.point_val
             else:
-                print('--Test failed--')
+                user.log += '--Test failed--\n'
                 failures[test.name] = -test.point_val
                 if test.fail_notif:
                     try:
@@ -466,7 +479,7 @@ class TestSkeleton:
                         subject = test.fail_notif.get('subject')
                         grader.message_user(user_id, body, subject)
 
-            print('--Current score: %i--' % total_score)
+            user.log += '--Current score: %i--\n' % total_score
         return total_score, failures
 
 
@@ -476,13 +489,45 @@ class User:
     submission_id = attr.ib(type=int)
     name = attr.ib(type=str)
     email = attr.ib(type=str)
-    grade = attr.ib(type=Real)
-    submitted = attr.ib(type=bool)
+    last_posted_grade = attr.ib(type=Real)
+    grade_matches_submission = attr.ib(type=bool)
+    grade = None
+
+    def __attrs_post_init__(self):
+        self.grade = self.last_posted_grade
+        self.log = ''
 
     def __str__(self):
         grade = 'ungraded' if self.grade is None else self.grade
-        submitted = 'posted' if self.submitted else 'not posted'
-        return '{} ({}): {} [{}]'.format(self.name, self.email, grade, submitted)
+        submit_status = 'posted' if self.submitted() else 'not posted'
+        if not self.grade_matches_submission:
+            submit_status += ' - needs re-grading (new submission)'
+        email = self.email if self.email is not None else 'No email'
+        return '{} ({}): {} [{}]'.format(self.name, email, grade, submit_status)
+
+    def submitted(self):
+        return self.grade == self.last_posted_grade
+
+    def grade_self(self, grader: PyCanvasGrader, test_skeleton: TestSkeleton):
+        result = test_skeleton.run_tests(grader, self)
+        if result is None:
+            return
+        else:
+            grade, _ = result
+            if grade != self.grade:
+                self.grade = grade
+
+        # TODO Remove this after removing the legacy grader flow
+        try:
+            os.chdir(os.path.join('..', '..'))
+        except (WindowsError, OSError):
+            print('Unable to leave current directory')
+            exit(1)
+
+    def submit_grade(self, grader: PyCanvasGrader, course_id: int, assignment_id: int):
+        if not self.submitted():
+            grader.grade_submission(course_id, assignment_id, self.user_id, self.grade)
+            self.last_posted_grade = self.grade
 
 
 def parse_skeleton(skeleton_file: str) -> TestSkeleton:
@@ -506,10 +551,11 @@ def parse_skeletons() -> list:
     return skeleton_list
 
 
-def restart_program(grader: PyCanvasGrader):
+def close_program(grader: PyCanvasGrader, restart=False):
     grader.close()
-    init_tempdir()
-    main()
+    if restart:
+        init_tempdir()
+        main()
     exit(0)
 
 
@@ -578,13 +624,27 @@ def choose_assignment(assignment_list) -> int:
     ).get('id')
 
 
-def choose_val(hi_num: int, allow_zero: bool = False) -> int:
+def choose_val(hi_num: int, allow_negative: bool = False, allow_zero: bool = False) -> int:
+    """
+    Ask the user for a number and return the result if it is valid
+    :param hi_num: The maximum number to allow
+    :param allow_negative: Whether to allow negative numbers
+    :param allow_zero: Whether to allow zero or not
+    :return: The user's numeric input
+    """
     for val in iter(input, None):
         if not val.isdigit():
             continue
 
         i = int(val)
-        if i in range(0 if allow_zero else 1, hi_num):
+        if allow_negative:
+            if not allow_zero and i == 0:
+                continue
+            elif i <= hi_num:
+                return i
+            continue
+
+        if i in range(0 if allow_zero else 1, hi_num + 1):
             return i
 
 
@@ -624,48 +684,106 @@ def choose(
     """
     list_choices(choices, message, formatter, msg_below)
 
-    i = choose_val(len(choices) + 1, False)
+    i = choose_val(len(choices), False)
     return choices[i - 1]
 
 
-def grade_all_submissions(grader: PyCanvasGrader, users: list, only_ungraded: bool = False):
-    pass
+def grade_all_submissions(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: list, only_ungraded: bool = False):
+    for user in users:
+        if only_ungraded:
+            if user.grade is None:
+                user.grade_self(grader, test_skeleton)
+        else:
+            user.grade_self(grader, test_skeleton)
 
 
-def user_menu(grader: PyCanvasGrader, user: User):
-    pass
+def submit_all_grades(grader: PyCanvasGrader, course_id: int, assignment_id: int, users: list):
+    for user in users:
+        if not user.submitted():
+            user.submit_grade(grader, course_id, assignment_id)
 
 
-def main_menu(grader: PyCanvasGrader, users: list):
+def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, course_id: int, assignment_id: int, user: User):
+
+    # This way strings only need to be updated once
+    possible_opts = {
+        'log': 'View test log',
+        'rerun': 'Re-run tests',
+        'run': 'Run tests',
+        'submit': 'Submit this grade',
+        'modify': 'Modify this user\'s grade',
+        'clear': 'Clear this user\'s grade',
+        'back': 'Return to the main menu'
+    }
+
+    while True:
+        options = []
+        if user.log != '':
+            options.append(possible_opts['rerun'])
+            options.append(possible_opts['log'])
+        else:
+            options.append(possible_opts['run'])
+        if not user.submitted():
+            options.append(possible_opts['submit'])
+        options.append(possible_opts['modify'])
+        if user.grade is not None:
+            options.append(possible_opts['clear'])
+        options.append(possible_opts['back'])
+
+        print('User Menu |', user)
+        if not user.submitted():
+            last_grade = 'ungraded' if user.last_posted_grade is None else user.last_posted_grade
+            print('Latest posted grade:', last_grade)
+        print('-')
+        choice = choose(options)
+
+        if choice == possible_opts['log']:
+            print(user.log)
+        elif choice in (possible_opts['rerun'], possible_opts['run']):
+            user.grade_self(grader, test_skeleton)
+        elif choice == possible_opts['submit']:
+            user.submit_grade(grader, course_id, assignment_id)
+        elif choice == possible_opts['modify']:
+            print('Enter a new grade: ')
+            user.grade = choose_val(1000, allow_negative=True, allow_zero=True)
+        elif choice == possible_opts['clear']:
+            user.grade = None
+        elif choice == possible_opts['back']:
+            return
+
+
+def main_menu(grader: PyCanvasGrader, course_id: int, assignment_id: int, test_skeleton: TestSkeleton, users: list):
+    print('Main Menu\n-')
     list_choices(users)
+    print('-')
 
     options = [
         'Grade all submissions',
         'Grade only ungraded submissions',
         'Submit all grades',
-        'Cancel'
+        'Quit'
     ]
 
     list_choices(options,
-                 ('Choose a user to work with that user individually.\n'
-                  'Alternatively, you may enter an action from the menu above.'),
+                 ('Choose a user to work with that user individually,\n'
+                  'or enter an action from the menu above.'),
                  msg_below=True,
                  start_at=len(users) + 1)
 
     choice = choose_val(len(options) + len(users))
 
-    if choice > len(users):
-        user_menu(grader, users[choice - 1])
+    if choice <= len(users):
+        user_menu(grader, test_skeleton, course_id, assignment_id, users[choice - 1])
     else:
-        selection = options[choice - 1]
+        selection = options[choice - len(users) - 1]
         if selection == options[0]:
-            grade_all_submissions(grader, users)
+            grade_all_submissions(grader, test_skeleton, users)
         elif selection == options[1]:
-            grade_all_submissions(grader, users, only_ungraded=True)
+            grade_all_submissions(grader, test_skeleton, users, only_ungraded=True)
         elif selection == options[2]:
-            submit_all_grades(grader, users)
+            submit_all_grades(grader, course_id, assignment_id, users)
         elif selection == options[3]:
-            close_grader()
+            close_program(grader)
 
 
 def startup(grader: PyCanvasGrader, prefs: dict) -> (int, int):
@@ -683,7 +801,7 @@ def startup(grader: PyCanvasGrader, prefs: dict) -> (int, int):
     course_list = grader.courses(selected_role)
     if len(course_list) < 1:
         input('No courses were found for the selected role. Press enter to restart')
-        restart_program(grader)
+        close_program(grader, restart=True)
 
     course_id = quickstart.get('course_id')
     if not course_id or not isinstance(course_id, int):
@@ -708,7 +826,7 @@ def startup(grader: PyCanvasGrader, prefs: dict) -> (int, int):
     assignment_list = grader.assignments(course_id, ungraded=ungraded)
     if len(assignment_list) < 1:
         input('No assignments were found. Press enter to restart')
-        restart_program(grader)
+        close_program(grader, restart=True)
 
     assignment_id = quickstart.get('assignment_id')
     if not assignment_id or not type(assignment_id) == int:
@@ -730,7 +848,7 @@ def grade_assignment(grader: PyCanvasGrader, prefs: dict, course_id: int, assign
     submission_list = grader.submissions(course_id, assignment_id)
     if len(submission_list) < 1:
         input('There are no submissions for this assignment. Press enter to restart')
-        restart_program(grader)
+        close_program(grader, restart=True)
 
     ungraded_only = session.get('only_grade_ungraded')
     if ungraded_only is None:
@@ -751,6 +869,9 @@ def grade_assignment(grader: PyCanvasGrader, prefs: dict, course_id: int, assign
             else:
                 pass
 
+    if len(users) == 0:
+        print('No submissions yet for this assignment.')
+
     selected_skeleton = None
     if quickstart.get('skeleton'):
         selected_skeleton = parse_skeleton(quickstart.get('skeleton'))
@@ -764,9 +885,8 @@ def grade_assignment(grader: PyCanvasGrader, prefs: dict, course_id: int, assign
         )
 
     # Display main menu
-    main_menu(users)
-
-    print('done')
+    while True:
+        main_menu(grader, course_id, assignment_id, selected_skeleton, users)
 
 
 def grade_assignment_legacy(grader: PyCanvasGrader, prefs: dict, course_id: int, assignment_id: int):
@@ -776,7 +896,7 @@ def grade_assignment_legacy(grader: PyCanvasGrader, prefs: dict, course_id: int,
     submission_list = grader.submissions(course_id, assignment_id)
     if len(submission_list) < 1:
         input('There are no submissions for this assignment. Press enter to restart')
-        restart_program(grader)
+        close_program(grader, restart=True)
 
     ungraded_only = session.get('only_grade_ungraded')
     if ungraded_only is None:
@@ -798,14 +918,14 @@ def grade_assignment_legacy(grader: PyCanvasGrader, prefs: dict, course_id: int,
 
     if len(user_submission_dict) < 1:
         input('Could not download any submissions. Press enter to restart')
-        restart_program(grader)
+        close_program(grader, restart=True)
 
     if session.get('verify_submission_count'):
         s = 's' if user_submission_dict else ''
         print('Successfully retrieved %i submission%s. Is this correct? (y or n):' % (len(user_submission_dict), s))
         correct = choose_bool()
         if not correct:
-            restart_program(grader)
+            close_program(grader, restart=True)
 
     skeleton_list = parse_skeletons()
     if len(skeleton_list) < 1:
