@@ -688,13 +688,23 @@ def choose(
     return choices[i - 1]
 
 
+def print_on_curline(msg: str):
+    sys.stdout.write('\r')
+    sys.stdout.flush()
+    sys.stdout.write(msg)
+    sys.stdout.flush()
+
+
 def grade_all_submissions(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: list, only_ungraded: bool = False):
-    for user in users:
-        if only_ungraded:
-            if user.grade is None:
-                user.grade_self(grader, test_skeleton)
-        else:
-            user.grade_self(grader, test_skeleton)
+    if only_ungraded:
+        users = filter(lambda u: u.grade is None, users)
+
+    total = len(users)
+
+    for count, user in enumerate(users):
+        print_on_curline('grading ({}/{})'.format(count, total))
+        user.grade_self(grader, test_skeleton)
+    print_on_curline('grading complete ({0}/{0})\n')
 
 
 def submit_all_grades(grader: PyCanvasGrader, course_id: int, assignment_id: int, users: list):
