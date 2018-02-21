@@ -614,7 +614,7 @@ def open_file(filename: str, mode: str = 'r'):
 def load_prefs() -> dict:
     prefs_file = open_file('preferences.toml')
     pref_vals = {}
-    if prefs_file:
+    if prefs_file is not None:
         try:
             pref_vals = toml.load(prefs_file)
         except toml.TomlDecodeError:
@@ -874,8 +874,11 @@ def startup(grader: PyCanvasGrader, prefs: dict) -> (int, int):
     session = prefs['session']
     quickstart = prefs['quickstart']
 
+    role_str = quickstart.get('role')
+    if type(role_str) == str:
+        role_str = role_str.lower()
     try:
-        selected_role = Enrollment[quickstart.get('role').lower()]
+        selected_role = Enrollment[role_str]
     except KeyError:
         selected_role = Enrollment[choose(
             ['teacher', 'ta'],
@@ -941,17 +944,21 @@ def grade_assignment(grader: PyCanvasGrader, prefs: dict, course_id: int, assign
 
     # Create users from submissions
     users = []
-    for submission in submission_list:
+    total = len(submission_list)
+    failed = 0
+    for count, submission in enumerate(submission_list):
         if ungraded_only and submission['grader_matches_current_submission'] and submission['score'] is not None:
             continue
         user_id = submission.get('user_id')
         if submission.get('attachments') is not None:
+            print_on_curline('downloading submissions... ({}/{})'.format(count, total))
             if grader.download_submission(submission, os.path.join('temp', str(user_id))):
                 user_data = grader.user(course_id, user_id)
                 users.append(User(user_id, submission['id'], user_data['name'], user_data.get('email'),
                                   submission['score'], submission['grade_matches_current_submission']))
             else:
-                pass
+                failed += 1
+    print_on_curline('Submissions downloaded. ({} total, {} failed to validate)\n\n'.format(total, failed))
 
     if len(users) == 0:
         print('No submissions yet for this assignment.')
