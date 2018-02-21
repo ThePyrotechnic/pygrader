@@ -423,36 +423,56 @@ class TestSkeleton:
     descriptor = attr.ib(type=str)
     tests = attr.ib(type=List[AssignmentTest])  # Tests to run in the order that they are added.
     disarm = attr.ib(default=False, type=bool)  # Whether to actually submit grades/send messages
+    file_path = attr.ib(default='', type=str)
 
     @classmethod
-    def from_file(cls, filename, dir='skeletons') -> 'TestSkeleton':
-        with open(dir + '/' + filename) as skeleton_file:
-            try:
-                if filename.endswith('.json'):
-                    data = json.load(skeleton_file)
-                elif filename.endswith('.toml'):
-                    data = toml.load(skeleton_file)
-                else:
+    def from_file(cls, filename, skeleton_dir='skeletons') -> 'TestSkeleton':
+        try:
+            with open(os.path.join(skeleton_dir, filename)) as skeleton_file:
+                try:
+                    if filename.endswith('.json'):
+                        data = json.load(skeleton_file)
+                    elif filename.endswith('.toml'):
+                        data = toml.load(skeleton_file)
+                    else:
+                        return None
+                except (json.JSONDecodeError, toml.TomlDecodeError) as e:
+                    print('There is an error in the', filename, 'skeleton file. This skeleton will not be available')
+                    print('Error:', e)
                     return None
-            except (json.JSONDecodeError, toml.TomlDecodeError):
-                print('There is an error in the', filename, 'skeleton file. This skeleton will not be available')
-                return None
-            try:
-                descriptor = data['descriptor']
-                tests = data['tests']
-            except KeyError:
-                return None
-            else:
-                disarm = data.get('disarm', False)
-                defaults = data.get('default', {})
-                test_list = []
-                for name, json_dict in tests.items():
-                    args = {**defaults, **json_dict, 'name': name}
-                    test = AssignmentTest.from_json_dict(args)
-                    if test is not None:
-                        test_list.append(test)
+                try:
+                    descriptor = data['descriptor']
+                    tests = data['tests']
+                except KeyError:
+                    return None
+                else:
+                    disarm = data.get('disarm', False)
+                    defaults = data.get('default', {})
+                    test_list = []
+                    for name, json_dict in tests.items():
+                        args = {**defaults, **json_dict, 'name': name}
+                        test = AssignmentTest.from_json_dict(args)
+                        if test is not None:
+                            test_list.append(test)
 
-                return TestSkeleton(descriptor, test_list, disarm)
+                    return TestSkeleton(descriptor, test_list, disarm, os.path.join(skeleton_dir, filename))
+        except (FileNotFoundError, IOError):
+            return None
+
+    def reload(self) -> bool:
+        """
+        Try to reload this test skeleton
+        :return: True if the reload succeeded, false otherwise
+        """
+        new_skeleton = TestSkeleton.from_file(self.file_path, '')
+        if new_skeleton is not None:
+            self.descriptor = new_skeleton.descriptor
+            self.tests = new_skeleton.tests
+            self.disarm = new_skeleton.disarm
+            self.file_path = new_skeleton.file_path
+            return True
+        else:
+            return False
 
     def run_tests(self, user: 'User') -> Tuple[int, Dict]:
         global DISARM_ALL
@@ -807,32 +827,46 @@ def main_menu(grader: PyCanvasGrader, course_id: int, assignment_id: int, test_s
     list_choices(users)
     print('-')
 
-    options = [
-        'Grade all submissions',
-        'Grade only ungraded submissions',
-        'Submit all grades',
-        'Quit'
+    options = {
+        'grade_all': 'Grade all submissions',
+        'grade_ungraded': 'Grade only ungraded submissions',
+        'submit_all': 'Submit all grades',
+        'reload_skeleton': 'Reload test skeleton',
+        'quit': 'Quit'
+    }
+
+    # Doing it this way preserves order while still only needing to update 1 string if needed
+    opt_list = [
+        options['grade_all'],
+        options['grade_ungraded'],
+        options['submit_all'],
+        options['reload_skeleton'],
+        options['quit']
     ]
 
-    list_choices(options,
+    list_choices(opt_list,
                  ('Choose a user to work with that user individually,\n'
                   'or enter an action from the menu above.'),
                  msg_below=True,
                  start_at=len(users) + 1)
 
-    choice = choose_val(len(options) + len(users))
+    choice = choose_val(len(opt_list) + len(users))
 
     if choice <= len(users):
         user_menu(grader, test_skeleton, course_id, assignment_id, users[choice - 1])
     else:
-        selection = options[choice - len(users) - 1]
-        if selection == options[0]:
+        selection = opt_list[choice - len(users) - 1]
+        if selection == options['grade_all']:
             grade_all_submissions(grader, test_skeleton, users)
-        elif selection == options[1]:
+        elif selection == options['grade_ungraded']:
             grade_all_submissions(grader, test_skeleton, users, only_ungraded=True)
-        elif selection == options[2]:
+        elif selection == options['submit_all']:
             submit_all_grades(grader, course_id, assignment_id, users)
-        elif selection == options[3]:
+        elif selection == options['reload_skeleton']:
+            if not test_skeleton.reload():
+                print('There was an error reloading this skeleton. It has not been reloaded.')
+                print('Double-check the file\'s syntax, and make sure there are no typos.')
+        elif selection == options['quit']:
             close_program(grader)
 
 

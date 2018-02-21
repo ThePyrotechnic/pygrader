@@ -13,14 +13,14 @@
       "fail_comment": "Submission did not compile"
     },
     "test_sums": {
-      "command": "./out",
+      "command": "out.exe",
       "print_output": true,
       "numeric_match": [5.18738, 5.18738, 5.18738, 5.18738],
       "point_val": 10,
       "fail_comment": "Incorrect sums"
     },
     "test_float": {
-      "command": "./out",
+      "command": "out.exe",
       "print_output": true,
       "numeric_match": [9.53674, -7],
       "exact_match": false,
@@ -28,7 +28,7 @@
       "fail_comment": "Incorrect float vals"
     },
     "test_double": {
-      "command": "./out",
+      "command": "out.exe",
       "print_output": true,
       "numeric_match": [-8.88178, -16],
       "exact_match": false,
