@@ -553,10 +553,10 @@ class User:
             print('Unable to leave current directory')
             exit(1)
 
-    def submit_grade(self, grader: PyCanvasGrader, course_id: int, assignment_id: int):
+    def submit_grade(self, grader: PyCanvasGrader):
         if not self.submitted():
-            grader.grade_submission(course_id, assignment_id, self.user_id, self.grade)
-            grader.comment_on_submission(course_id, assignment_id, self.user_id, self.comment)
+            grader.grade_submission(self.user_id, self.grade)
+            grader.comment_on_submission(self.user_id, self.comment)
             self.last_posted_grade = self.grade
 
 
@@ -742,7 +742,7 @@ def print_on_curline(msg: str):
     sys.stdout.flush()
 
 
-def grade_all_submissions(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: list, only_ungraded: bool = False):
+def grade_all_submissions(test_skeleton: TestSkeleton, users: list, only_ungraded: bool = False):
     if only_ungraded:
         users = filter(lambda u: u.grade is None, users)
 
@@ -754,13 +754,13 @@ def grade_all_submissions(grader: PyCanvasGrader, test_skeleton: TestSkeleton, u
     print_on_curline('grading complete ({0}/{0})\n'.format(total))
 
 
-def submit_all_grades(grader: PyCanvasGrader, course_id: int, assignment_id: int, users: list):
+def submit_all_grades(grader: PyCanvasGrader, users: list):
     for user in users:
         if not user.submitted():
-            user.submit_grade(grader, course_id, assignment_id)
+            user.submit_grade(grader)
 
 
-def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, course_id: int, assignment_id: int, user: User):
+def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
 
     # This way strings only need to be updated once
     possible_opts = {
@@ -801,7 +801,7 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, course_id: in
         elif choice in (possible_opts['rerun'], possible_opts['run']):
             user.grade_self(test_skeleton)
         elif choice == possible_opts['submit']:
-            user.submit_grade(grader, course_id, assignment_id)
+            user.submit_grade(grader)
         elif choice == possible_opts['modify']:
             print('Enter a new grade: ')
             user.grade = choose_val(1000, allow_negative=True, allow_zero=True)
@@ -853,15 +853,15 @@ def main_menu(grader: PyCanvasGrader, course_id: int, assignment_id: int, test_s
     choice = choose_val(len(opt_list) + len(users))
 
     if choice <= len(users):
-        user_menu(grader, test_skeleton, course_id, assignment_id, users[choice - 1])
+        user_menu(grader, test_skeleton, users[choice - 1])
     else:
         selection = opt_list[choice - len(users) - 1]
         if selection == options['grade_all']:
-            grade_all_submissions(grader, test_skeleton, users)
+            grade_all_submissions(test_skeleton, users)
         elif selection == options['grade_ungraded']:
-            grade_all_submissions(grader, test_skeleton, users, only_ungraded=True)
+            grade_all_submissions(test_skeleton, users, only_ungraded=True)
         elif selection == options['submit_all']:
-            submit_all_grades(grader, course_id, assignment_id, users)
+            submit_all_grades(grader, users)
         elif selection == options['reload_skeleton']:
             if not test_skeleton.reload():
                 print('There was an error reloading this skeleton. It has not been reloaded.')
@@ -899,18 +899,15 @@ def startup(grader: PyCanvasGrader, prefs: dict) -> (int, int):
         if not valid:
             course_id = choose_course(course_list)
 
+    grader.course_id = course_id
+
     if session.get('prompt_to_save') and \
             (not quickstart.get('course_id') or not quickstart.get('role')):
         print('Save these settings for faster startup next time? (y or n):')
         if choose_bool():
             save_prefs(prefs, {'quickstart': {'role': selected_role.name, 'course_id': course_id}})
 
-    ungraded = session.get('only_show_ungraded')
-    if ungraded is None:
-        print('Show only ungraded assignments? (y or n):')
-        ungraded = choose_bool()
-
-    assignment_list = grader.assignments(course_id, ungraded=ungraded)
+    assignment_list = grader.assignments(ungraded=False)
     if len(assignment_list) < 1:
         input('No assignments were found. Press enter to restart')
         close_program(grader, restart=True)
@@ -924,10 +921,12 @@ def startup(grader: PyCanvasGrader, prefs: dict) -> (int, int):
         if not valid:
             assignment_id = choose_assignment(assignment_list)
 
+    grader.assignment_id = assignment_id
+
     return course_id, assignment_id
 
 
-def grade_assignment(grader: PyCanvasGrader, prefs: dict, course_id: int, assignment_id: int):
+def grade_assignment(grader: PyCanvasGrader, prefs: dict):
     session = prefs['session']
     quickstart = prefs['quickstart']
 
@@ -990,8 +989,8 @@ def main():
     grader = PyCanvasGrader()
 
     prefs = load_prefs()
-    course_id, assignment_id = startup(grader, prefs)
-    grade_assignment(grader, prefs, course_id, assignment_id)
+    grader.course_id, grader.assignment_id = startup(grader, prefs)
+    grade_assignment(grader, prefs)
 
 
 if __name__ == '__main__':
