@@ -267,7 +267,7 @@ class AssignmentTest:
     numeric_match = attr.ib(None, type=list)
     timeout = attr.ib(None, type=int)
     fail_comment = attr.ib(None, type=str)
-    point_val = attr.ib(0, type=int)
+    point_val = attr.ib(0, type=float)
 
     test_must_pass = option(False)
     print_file = option()
