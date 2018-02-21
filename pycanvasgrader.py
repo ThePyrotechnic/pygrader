@@ -69,14 +69,14 @@ class PyCanvasGrader:
     A PyCanvasGrader object; responsible for communicating with the Canvas API
     """
 
-    def __init__(self):
+    def __init__(self, course_id: int = -1, assignment_id: int = -1):
         self.token = self.authenticate()
-        if self.token == 'none':
-            print('Unable to retrieve OAuth2 token')
-            exit()
 
         self.session = requests.Session()
         self.session.headers.update({'Authorization': 'Bearer ' + self.token})
+
+        self.course_id = course_id
+        self.assignment_id = assignment_id
 
     @staticmethod
     def authenticate() -> str:
@@ -93,8 +93,8 @@ class PyCanvasGrader:
                     if len(token) > 2:
                         return token
         except FileNotFoundError:
-            print(
-                "Could not find an access.token file. You must place your Canvas OAuth token in a file named 'access.token', in this directory.")
+            print("Could not find an access.token file. You must place your Canvas OAuth token in a file named\
+             'access.token', in this directory.")
             exit(1)
 
     def close(self):
@@ -112,27 +112,27 @@ class PyCanvasGrader:
         response = self.session.get(url)
         return json.loads(response.text)
 
-    def assignments(self, course_id: int, ungraded: bool = True) -> list:
+    def assignments(self, ungraded: bool = True) -> list:
         """
         :param course_id: Course ID to filter by
         :param ungraded: Whether to filter assignments by only those that have ungraded work. Default: True
         :return: A list of the course's assignments
         """
-        url = 'https://sit.instructure.com/api/v1/courses/' + str(course_id) + '/assignments?per_page=100'
+        url = 'https://sit.instructure.com/api/v1/courses/' + str(self.course_id) + '/assignments?per_page=100'
         if ungraded:
             url += '&bucket=ungraded'
 
         response = self.session.get(url)
         return json.loads(response.text)
 
-    def submissions(self, course_id: int, assignment_id: int) -> list:
+    def submissions(self) -> list:
         """
         :param course_id: The ID of the course containing the assignment
         :param assignment_id: The ID of the assignment
         :return: A list of the assignment's submissions
         """
-        url = 'https://sit.instructure.com/api/v1/courses/' + str(course_id) + '/assignments/' + str(
-            assignment_id) + '/submissions?per_page=100'
+        url = 'https://sit.instructure.com/api/v1/courses/' + str(self.course_id) + '/assignments/' + str(
+            self.assignment_id) + '/submissions?per_page=100'
 
         response = self.session.get(url)
         final_response = json.loads(response.text)
@@ -170,23 +170,23 @@ class PyCanvasGrader:
                         f.write(chunk)
         return True
 
-    def user(self, course_id: int, user_id: int) -> dict:
+    def user(self, user_id: int) -> dict:
         """
         :param course_id: The class to search
         :param user_id: The ID of the user
         :return: A dictionary with the user's information
         """
-        url = 'https://sit.instructure.com/api/v1/courses/%i/users/%i' % (course_id, user_id)
+        url = 'https://sit.instructure.com/api/v1/courses/%i/users/%i' % (self.course_id, user_id)
 
         response = self.session.get(url)
         return json.loads(response.text)
 
-    def grade_submission(self, course_id, assignment_id, user_id, grade):
+    def grade_submission(self, user_id: int, grade: Real):
         global DISARM_ALL, DISARM_GRADER
         if grade is None:
             grade = 'NaN'
         url = 'https://sit.instructure.com/api/v1/courses/%i/assignments/%i/submissions/%i/?submission[posted_grade]=%s' \
-              % (course_id, assignment_id, user_id, str(grade))
+              % (self.course_id, self.assignment_id, user_id, str(grade))
 
         if DISARM_ALL or DISARM_GRADER:
             print('Grader disarmed; grade will not actually be submitted')
@@ -195,10 +195,10 @@ class PyCanvasGrader:
             response = self.session.put(url)
             return json.loads(response.text)
 
-    def comment_on_submission(self, course_id: int, assignment_id: int, user_id: int, comment: str):
+    def comment_on_submission(self, user_id: int, comment: str):
         global DISARM_ALL, DISARM_MESSAGER
         url = 'https://sit.instructure.com/api/v1/courses/%i/assignments/%i/submissions/%i/?comment[text_comment]=%s' \
-              % (course_id, assignment_id, user_id, comment)
+              % (self.course_id, self.assignment_id, user_id, comment)
 
         if DISARM_ALL or DISARM_MESSAGER:
             return 'dummy success'
