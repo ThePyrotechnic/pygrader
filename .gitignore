@@ -2,3 +2,6 @@
 .idea/*
 temp/*
 old-temp/*
+
+skeletons/*
+!skeletons/.gitignore
