@@ -8,7 +8,6 @@ a valid Canvas OAuth2 token
 REQUIRED File structure:
 - pycanvasgrader
   -- skeletons
-  -- temp
   access.token
   pycanvasgrader.py
 
@@ -161,7 +160,7 @@ class PyCanvasGrader:
             except ValueError:
                 return False
 
-            os.makedirs(os.path.join('temp', str(user_id)), exist_ok=True)
+            os.makedirs(os.path.join('.temp', str(user_id)), exist_ok=True)
             r = self.session.get(url, stream=True)
             with open(os.path.join(filepath, filename), 'wb') as f:
                 for chunk in r.iter_content(chunk_size=1024):
@@ -473,7 +472,7 @@ class TestSkeleton:
             return False
 
     def run_tests(self, user: 'User') -> Tuple[int, Dict]:
-        global DISARM_ALL
+        global DISARM_ALL, INSTALL_DIR
         DISARM_ALL = self.disarm
 
         user_id = user.user_id
@@ -483,7 +482,7 @@ class TestSkeleton:
         user.log = ''
 
         try:
-            os.chdir(os.path.join('temp', str(user_id)))
+            os.chdir(os.path.join(INSTALL_DIR, '.temp', str(user_id)))
         except (WindowsError, OSError):
             user.log += 'Could not access files for user "%i". Skipping\n' % user_id
             return None
@@ -537,6 +536,8 @@ class User:
         return self.grade == self.last_posted_grade
 
     def grade_self(self, test_skeleton: TestSkeleton):
+        global INSTALL_DIR
+
         grade = test_skeleton.run_tests(self)
         if grade is None:
             return
@@ -544,12 +545,7 @@ class User:
             if grade != self.grade:
                 self.grade = grade
 
-        # TODO Remove this after removing the legacy grader flow
-        try:
-            os.chdir(os.path.join('..', '..'))
-        except (WindowsError, OSError):
-            print('Unable to leave current directory')
-            exit(1)
+        os.chdir(INSTALL_DIR)
 
     def submit_grade(self, grader: PyCanvasGrader):
         if not self.submitted():
@@ -588,12 +584,13 @@ def close_program(grader: PyCanvasGrader, restart=False):
 
 
 def init_tempdir():
+    global INSTALL_DIR
+
     try:
-        if os.path.exists('temp'):
-            if os.path.exists('old-temp'):
-                shutil.rmtree(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'old-temp'))
-            os.rename('temp', 'old-temp')
-        os.makedirs('temp', exist_ok=True)
+        os.chdir(INSTALL_DIR)
+        if os.path.exists('.temp'):
+                shutil.rmtree('.temp')
+        os.makedirs('.temp', exist_ok=True)
     except:
         print('An error occurred while initializing the "temp" directory.',
               'Please delete/create the directory manually and re-run the program')
@@ -667,7 +664,9 @@ def choose_val(hi_num: int, allow_negative: bool = False, allow_zero: bool = Fal
     :return: The user's numeric input
     """
     for val in iter(input, None):
-        if not val.isdigit():
+        try:
+            float(val)
+        except ValueError:
             continue
 
         if allow_float:
@@ -755,9 +754,9 @@ def save_state(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: List[
         os.makedirs(cache_dir, exist_ok=True)
         os.chdir(cache_dir)
 
-        if os.path.exists('temp'):
-            shutil.rmtree('temp')
-        shutil.copytree(os.path.join(INSTALL_DIR, 'temp'), 'temp')
+        if os.path.exists('.temp'):
+            shutil.rmtree('.temp')
+        shutil.copytree(os.path.join(INSTALL_DIR, '.temp'), '.temp')
 
         with open('.cachefile', mode='w') as cache_file:
             pprint.pprint(test_skeleton, stream=cache_file)
@@ -777,11 +776,11 @@ def load_state(course_id: int, assignment_id: int):
     global INSTALL_DIR
 
     os.chdir(INSTALL_DIR)
-    if os.path.exists('temp'):
-        shutil.rmtree('temp')
+    if os.path.exists('.temp'):
+        shutil.rmtree('.temp')
 
     os.chdir(os.path.join('.cache', str(course_id), str(assignment_id)))
-    shutil.copytree('temp', os.path.join(INSTALL_DIR, 'temp'))
+    shutil.copytree('.temp', os.path.join(INSTALL_DIR, '.temp'))
     with open('.cachefile') as cache_file:
         test_skeleton = eval(cache_file.readline())
         users = eval(cache_file.readline())
@@ -904,7 +903,7 @@ def main_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: list, 
         'grade_ungraded': 'Grade only ungraded submissions',
         'submit_all': 'Submit all grades',
         'reload_skeleton': 'Reload test skeleton',
-        'save': 'Save state',
+        'save': 'Save changes',
         'save_and_quit': 'Save and quit',
         'quit': 'Quit'
     }
@@ -915,10 +914,12 @@ def main_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: list, 
         options['grade_ungraded'],
         options['submit_all'],
         options['reload_skeleton'],
-        options['save'],
-        options['save_and_quit'],
-        options['quit']
     ]
+    if not CURRENTLY_SAVED:
+        opt_list.append(options['save'])
+        opt_list.append(options['save_and_quit'])
+
+    opt_list.append(options['quit'])
 
     list_choices(opt_list,
                  ('Choose a user to work with that user individually,\n'
@@ -1054,7 +1055,7 @@ def grade_assignment(grader: PyCanvasGrader, prefs: dict):
         user_id = submission.get('user_id')
         if submission.get('attachments') is not None:
             print_on_curline('downloading submissions... ({}/{})'.format(count, total))
-            if grader.download_submission(submission, os.path.join('temp', str(user_id))):
+            if grader.download_submission(submission, os.path.join('.temp', str(user_id))):
                 user_data = grader.user(user_id)
                 users.append(User(user_id, submission['id'], user_data['name'], user_data.get('email'),
                                   submission['score'], submission['grade_matches_current_submission']))
@@ -1083,7 +1084,7 @@ def grade_assignment(grader: PyCanvasGrader, prefs: dict):
 
 
 def main():
-    global INSTALL_DIR
+    global INSTALL_DIR, CURRENTLY_SAVED
 
     if sys.version_info < (3, 5):
         print('Python 3.5+ is required')
@@ -1111,6 +1112,7 @@ def main():
                     grade_assignment(grader, prefs)
                 else:
                     print('Loaded cached version of this grading session.')
+                    CURRENTLY_SAVED = True
                     while True:
                         main_menu(grader, test_skeleton, users, prefs)
             else:

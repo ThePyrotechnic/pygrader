@@ -1,8 +1,7 @@
 *.token
 .idea/*
 .cache/*
-temp/*
-old-temp/*
+.temp/*
 preferences.toml
 skeletons/*
 !skeletons/.gitignore
