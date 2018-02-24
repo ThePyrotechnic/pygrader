@@ -34,7 +34,6 @@ import subprocess
 import sys
 import importlib
 from datetime import datetime
-from importlib import util
 from numbers import Real
 from typing import Callable, Dict, List, Sequence, Tuple, TypeVar
 
@@ -219,6 +218,19 @@ class PyCanvasGrader:
         else:
             response = self.session.post(url, data)
             return json.loads(response.text)
+
+    @property
+    def cache_file(self):
+        """
+        Cache file to use for the current course/assignment combination
+        """
+        file = os.path.join(
+            INSTALL_DIR,
+            '.cache',
+            str(self.course_id),
+            str(self.assignment_id)
+        )
+        return os.path.abspath(file)
 
 
 def option(default=False):
@@ -526,12 +538,13 @@ class User:
 
     def __str__(self):
         grade = 'ungraded' if self.grade is None else self.grade
-        submit_status = 'posted' if self.submitted() else 'not posted'
+        submit_status = 'posted' if self.submitted else 'not posted'
         if not self.grade_matches_submission:
             submit_status += ' - needs re-grading (new submission)'
-        email = self.email if self.email is not None else 'No email'
+        email = self.email or 'No email'
         return '{} ({}): {} [{}]'.format(self.name, email, grade, submit_status)
 
+    @property
     def submitted(self):
         return self.grade == self.last_posted_grade
 
@@ -548,7 +561,7 @@ class User:
         os.chdir(INSTALL_DIR)
 
     def submit_grade(self, grader: PyCanvasGrader):
-        if not self.submitted():
+        if not self.submitted:
             grader.grade_submission(self.user_id, self.grade)
             grader.comment_on_submission(self.user_id, self.comment)
             self.last_posted_grade = self.grade
@@ -690,18 +703,21 @@ def choose_bool() -> bool:
             return b.startswith(('y', 'Y'))
 
 
+def get_lines():
+    while True:
+        # Get every line until the first empty line
+        yield from iter(input, '')
+
+        # Get the next line and check if it is empty. If not, continue
+        nextline = input()
+        if nextline == '':
+            break
+        else:
+            yield nextline
+
+
 def multiline_input() -> str:
-    final_inp = ''
-    cur_inp = input()
-    last_was_newline = False
-    while not (last_was_newline and cur_inp == ''):
-        if final_inp != '' and cur_inp != '':
-            final_inp += '\n'
-        final_inp += cur_inp
-        if cur_inp == '':
-            last_was_newline = True
-        cur_inp = input()
-    return final_inp
+    return '\n'.join(get_lines()).rstrip()
 
 
 def list_choices(
@@ -808,7 +824,7 @@ def grade_all_submissions(test_skeleton: TestSkeleton, users: List[User], only_u
 def submit_all_grades(grader: PyCanvasGrader, users: list) -> bool:
     modified = False
     for user in users:
-        if not user.submitted():
+        if not user.submitted:
             user.submit_grade(grader)
             modified = True
     return modified
@@ -836,7 +852,7 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
             options.append(possible_opts['log'])
         else:
             options.append(possible_opts['run'])
-        if not user.submitted():
+        if not user.submitted:
             options.append(possible_opts['submit'])
         options.append(possible_opts['modify'])
         options.append(possible_opts['comment'])
@@ -845,7 +861,7 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
         options.append(possible_opts['back'])
 
         print('User Menu |', user)
-        if not user.submitted():
+        if not user.submitted:
             last_grade = 'ungraded' if user.last_posted_grade is None else user.last_posted_grade
             print('Latest posted grade:', last_grade)
         print('-')
@@ -859,9 +875,9 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
             if user.grade != grade_before:
                 CURRENTLY_SAVED = False
         elif choice == possible_opts['submit']:
-            submitted_before = user.submitted()
+            submitted_before = user.submitted
             user.submit_grade(grader)
-            if user.submitted() != submitted_before:
+            if user.submitted != submitted_before:
                 CURRENTLY_SAVED = False
         elif choice == possible_opts['modify']:
             grade_before = user.grade
@@ -1098,25 +1114,22 @@ def main():
     prefs = load_prefs()
     grader.course_id, grader.assignment_id = startup(grader, prefs)
 
-    if prefs['session'].get('look_for_cache'):
-        if os.path.exists(os.path.join('.cache', str(grader.course_id), str(grader.assignment_id))):
-            last_modified_secs = os.path.getmtime(os.path.join('.cache', str(grader.course_id), str(grader.assignment_id)))
-            last_modified = datetime.fromtimestamp(last_modified_secs).strftime('%b %d, %Y at %I:%M %p')
-            print('Found a cached version of this assignment from {}.'.format(last_modified))
-            print('Would you like to load it? (y or n)')
-            if choose_bool():
-                try:
-                    test_skeleton, users = load_state(grader.course_id, grader.assignment_id)
-                except:
-                    print('This cache is invalid, it will not be loaded.')
-                    grade_assignment(grader, prefs)
-                else:
-                    print('Loaded cached version of this grading session.')
-                    CURRENTLY_SAVED = True
-                    while True:
-                        main_menu(grader, test_skeleton, users, prefs)
-            else:
+    if prefs['session'].get('look_for_cache') and os.path.exists(grader.cache_file):
+        last_modified = datetime.fromtimestamp(os.path.getmtime(grader.cache_file))
+        print('Found a cached version of this assignment from',
+              '{:%b %d, %Y at %I:%M %p.}'.format(last_modified))
+        print('Would you like to load it? (y or n)')
+        if choose_bool():
+            try:
+                test_skeleton, users = load_state(grader.course_id, grader.assignment_id)
+            except:
+                print('This cache is invalid, it will not be loaded.')
                 grade_assignment(grader, prefs)
+            else:
+                print('Loaded cached version of this grading session.')
+                CURRENTLY_SAVED = True
+                while True:
+                    main_menu(grader, test_skeleton, users, prefs)
         else:
             grade_assignment(grader, prefs)
     else:
