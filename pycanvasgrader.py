@@ -41,7 +41,6 @@ from typing import Callable, Dict, List, Sequence, Tuple, TypeVar
 
 # 3rd-party
 import attr
-import math
 import requests
 import toml
 
@@ -57,6 +56,7 @@ RUN_WITH_TESTS = False
 ONLY_RUN_TESTS = False
 NUM_REGEX = re.compile(r'-?\d+\.\d+|-?\d+')
 INSTALL_DIR = '.'
+CURRENTLY_SAVED = False
 
 # TODO determine whether or not should be capitalized
 Enrollment = Enum('Enrollment', ['teacher', 'student', 'ta', 'observer', 'designer'])
@@ -594,7 +594,7 @@ def init_tempdir():
                 shutil.rmtree(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'old-temp'))
             os.rename('temp', 'old-temp')
         os.makedirs('temp', exist_ok=True)
-    except BaseException:
+    except:
         print('An error occurred while initializing the "temp" directory.',
               'Please delete/create the directory manually and re-run the program')
         exit(1)
@@ -747,20 +747,30 @@ def print_on_curline(msg: str):
 
 
 def save_state(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: List[User]):
-    global INSTALL_DIR
+    global INSTALL_DIR, CURRENTLY_SAVED
+    print_on_curline('Saving state...')
+    try:
+        os.chdir(INSTALL_DIR)
+        cache_dir = os.path.join('.cache', str(grader.course_id), str(grader.assignment_id))
+        os.makedirs(cache_dir, exist_ok=True)
+        os.chdir(cache_dir)
 
-    os.chdir(INSTALL_DIR)
-    cache_dir = os.path.join('.cache', str(grader.course_id), str(grader.assignment_id))
-    os.makedirs(cache_dir, exist_ok=True)
-    os.chdir(cache_dir)
+        if os.path.exists('temp'):
+            shutil.rmtree('temp')
+        shutil.copytree(os.path.join(INSTALL_DIR, 'temp'), 'temp')
 
-    if os.path.exists('temp'):
-        shutil.rmtree('temp')
-    shutil.copytree(os.path.join(INSTALL_DIR, 'temp'), 'temp')
+        with open('.cachefile', mode='w') as cache_file:
+            pprint.pprint(test_skeleton, stream=cache_file)
+            pprint.pprint(users, stream=cache_file)
 
-    with open('.cachefile', mode='w') as cache_file:
-        pprint.pprint(test_skeleton, stream=cache_file)
-        pprint.pprint(users, stream=cache_file)
+        print_on_curline('State saved.\n')
+        CURRENTLY_SAVED = True
+        os.chdir(INSTALL_DIR)
+    except:
+        print('There was an error while saving the state.')
+        print('Make sure the program has permission to read/write in {}'.format(os.path.join(INSTALL_DIR, '.cache')))
+        print('and that the directory is not in use.')
+        os.chdir(INSTALL_DIR)
 
 
 def load_state(course_id: int, assignment_id: int):
@@ -780,25 +790,33 @@ def load_state(course_id: int, assignment_id: int):
         return test_skeleton, users
 
 
-def grade_all_submissions(test_skeleton: TestSkeleton, users: list, only_ungraded: bool = False):
+def grade_all_submissions(test_skeleton: TestSkeleton, users: List[User], only_ungraded: bool = False) -> bool:
     if only_ungraded:
-        users = filter(lambda u: u.grade is None, users)
-
+        users = [u for u in users if u.grade is None]
+        if len(users) == 0:
+            print('No currently ungraded submissions to grade.')
+            return False
+    
     total = len(users)
 
     for count, user in enumerate(users):
         print_on_curline('grading ({}/{})'.format(count, total))
         user.grade_self(test_skeleton)
     print_on_curline('grading complete ({0}/{0})\n'.format(total))
+    return True
 
 
-def submit_all_grades(grader: PyCanvasGrader, users: list):
+def submit_all_grades(grader: PyCanvasGrader, users: list) -> bool:
+    modified = False
     for user in users:
         if not user.submitted():
             user.submit_grade(grader)
+            modified = True
+    return modified
 
 
 def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
+    global CURRENTLY_SAVED
 
     # This way strings only need to be updated once
     possible_opts = {
@@ -837,12 +855,21 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
         if choice == possible_opts['log']:
             print(user.log)
         elif choice in (possible_opts['rerun'], possible_opts['run']):
+            grade_before = user.grade
             user.grade_self(test_skeleton)
+            if user.grade != grade_before:
+                CURRENTLY_SAVED = False
         elif choice == possible_opts['submit']:
+            submitted_before = user.submitted()
             user.submit_grade(grader)
+            if user.submitted() != submitted_before:
+                CURRENTLY_SAVED = False
         elif choice == possible_opts['modify']:
+            grade_before = user.grade
             print('Enter a new grade: ')
             user.grade = choose_val(1000, allow_negative=True, allow_zero=True, allow_float=True)
+            if user.grade != grade_before:
+                CURRENTLY_SAVED = False
         elif choice == possible_opts['comment']:
             cur_comment = user.comment
             if cur_comment == '':
@@ -854,13 +881,20 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
             inp = multiline_input()
             if inp != '':
                 user.comment = inp
+                if user.comment != cur_comment:
+                    CURRENTLY_SAVED = False
         elif choice == possible_opts['clear']:
+            grade_before = user.grade
             user.grade = None
+            if user.grade != grade_before:
+                CURRENTLY_SAVED = False
         elif choice == possible_opts['back']:
             return
 
 
-def main_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: list):
+def main_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: list, prefs: dict):
+    global CURRENTLY_SAVED
+
     print('Main Menu\n-')
     list_choices(users)
     print('-')
@@ -870,6 +904,8 @@ def main_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: list):
         'grade_ungraded': 'Grade only ungraded submissions',
         'submit_all': 'Submit all grades',
         'reload_skeleton': 'Reload test skeleton',
+        'save': 'Save state',
+        'save_and_quit': 'Save and quit',
         'quit': 'Quit'
     }
 
@@ -879,6 +915,8 @@ def main_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: list):
         options['grade_ungraded'],
         options['submit_all'],
         options['reload_skeleton'],
+        options['save'],
+        options['save_and_quit'],
         options['quit']
     ]
 
@@ -895,17 +933,43 @@ def main_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: list):
     else:
         selection = opt_list[choice - len(users) - 1]
         if selection == options['grade_all']:
-            grade_all_submissions(test_skeleton, users)
+            success = grade_all_submissions(test_skeleton, users)
+            if success and not CURRENTLY_SAVED and not prefs['session'].get('disable_autosave'):
+                save_state(grader, test_skeleton, users)
+            elif success:
+                CURRENTLY_SAVED = False
         elif selection == options['grade_ungraded']:
-            grade_all_submissions(test_skeleton, users, only_ungraded=True)
+            success = grade_all_submissions(test_skeleton, users, only_ungraded=True)
+            if success and not CURRENTLY_SAVED and not prefs['session'].get('disable_autosave'):
+                save_state(grader, test_skeleton, users)
+            elif success:
+                CURRENTLY_SAVED = False
         elif selection == options['submit_all']:
-            submit_all_grades(grader, users)
+            modified = submit_all_grades(grader, users)
+            if modified:
+                CURRENTLY_SAVED = False
         elif selection == options['reload_skeleton']:
             if not test_skeleton.reload():
                 print('There was an error reloading this skeleton. It has not been reloaded.')
                 print('Double-check the file\'s syntax, and make sure there are no typos.')
+            else:
+                CURRENTLY_SAVED = False
+        elif selection == options['save']:
+            if not CURRENTLY_SAVED:
+                save_state(grader, test_skeleton, users)
+            else:
+                print('Nothing to save.')
+        elif selection == options['save_and_quit']:
+            if not CURRENTLY_SAVED:
+                save_state(grader, test_skeleton, users)
+            close_program(grader)
         elif selection == options['quit']:
-            save_state(grader, test_skeleton, users)
+            if not CURRENTLY_SAVED:
+                print('You have unsaved changes in the current grading session.')
+                print('Would you like to save them before quitting? (y or n)')
+                if choose_bool():
+                    save_state(grader, test_skeleton, users)
+            
             close_program(grader)
 
 
@@ -1015,7 +1079,7 @@ def grade_assignment(grader: PyCanvasGrader, prefs: dict):
 
     # Display main menu
     while True:
-        main_menu(grader, selected_skeleton, users)
+        main_menu(grader, selected_skeleton, users, prefs)
 
 
 def main():
@@ -1048,7 +1112,7 @@ def main():
                 else:
                     print('Loaded cached version of this grading session.')
                     while True:
-                        main_menu(grader, test_skeleton, users)
+                        main_menu(grader, test_skeleton, users, prefs)
             else:
                 grade_assignment(grader, prefs)
         else:

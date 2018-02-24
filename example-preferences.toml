@@ -7,10 +7,15 @@
 
 # If true, look for cached versions of the selected assignment
 look_for_cache = true
+
 # If true, after choosing role and course id, prompt to save these choices
 prompt_to_save = true
+
 # If true, when downloading submissions, only download submissions that are currently ungraded
 only_download_ungraded = false
+
+# If true, the grader will not automatically save the current session for any reason
+disable_autosave = false
 
 [quickstart]
 # If any of these options are invalid or unknown,
@@ -18,7 +23,9 @@ only_download_ungraded = false
 
 # The role to filter courses by (must be 'teacher' or 'ta')
 role = "teacher"
+
 # The course ID of the course to choose an assignment from
 course_id = 133
+
 # The skeleton to use when grading the chosen assignment
 skeleton = "HW1d.json"
