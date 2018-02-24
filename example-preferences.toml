@@ -1,9 +1,24 @@
+# THE PREFERENCES IN THIS FILE ARE FOR EXAMPLE ONLY!
+# YOUR ACTUAL PREFERENCES SHOULD BE IN A FILE NAMED "preferences.toml"
+
 [session]
+# If any of these options are invalid or unknown,
+# then they will be assumed to be false.
+
+# If true, look for cached versions of the selected assignment
+look_for_cache = true
+# If true, after choosing role and course id, prompt to save these choices
 prompt_to_save = true
-only_show_ungraded = false
-only_grade_ungraded = false
+# If true, when downloading submissions, only download submissions that are currently ungraded
+only_download_ungraded = false
 
 [quickstart]
+# If any of these options are invalid or unknown,
+# then you will be asked to choose them from a list when the grader is run.
+
+# The role to filter courses by (must be 'teacher' or 'ta')
 role = "teacher"
+# The course ID of the course to choose an assignment from
 course_id = 133
+# The skeleton to use when grading the chosen assignment
 skeleton = "HW1d.json"

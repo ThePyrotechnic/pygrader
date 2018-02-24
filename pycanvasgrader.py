@@ -24,6 +24,7 @@ Options:
     --skeleton=<skeleton>
 """
 # built-ins
+import pprint
 from enum import Enum
 import json
 import os
@@ -55,9 +56,7 @@ DISARM_GRADER = False
 RUN_WITH_TESTS = False
 ONLY_RUN_TESTS = False
 NUM_REGEX = re.compile(r'-?\d+\.\d+|-?\d+')
-# r'[+-]?\d+\.\d+|\d+'
-# r'[-+]?\d+(\.\d+)?'
-
+INSTALL_DIR = '.'
 
 # TODO determine whether or not should be capitalized
 Enrollment = Enum('Enrollment', ['teacher', 'student', 'ta', 'observer', 'designer'])
@@ -77,6 +76,9 @@ class PyCanvasGrader:
 
         self.course_id = course_id
         self.assignment_id = assignment_id
+
+    def __repr__(self):
+        return 'PyCanvasGrader(course_id={}, assignment_id={})'.format(self.course_id, self.assignment_id)
 
     @staticmethod
     def authenticate() -> str:
@@ -114,7 +116,6 @@ class PyCanvasGrader:
 
     def assignments(self, ungraded: bool = True) -> list:
         """
-        :param course_id: Course ID to filter by
         :param ungraded: Whether to filter assignments by only those that have ungraded work. Default: True
         :return: A list of the course's assignments
         """
@@ -127,8 +128,6 @@ class PyCanvasGrader:
 
     def submissions(self) -> list:
         """
-        :param course_id: The ID of the course containing the assignment
-        :param assignment_id: The ID of the assignment
         :return: A list of the assignment's submissions
         """
         url = 'https://sit.instructure.com/api/v1/courses/' + str(self.course_id) + '/assignments/' + str(
@@ -172,7 +171,6 @@ class PyCanvasGrader:
 
     def user(self, user_id: int) -> dict:
         """
-        :param course_id: The class to search
         :param user_id: The ID of the user
         :return: A dictionary with the user's information
         """
@@ -519,13 +517,13 @@ class User:
     email = attr.ib(type=str)
     last_posted_grade = attr.ib(type=Real)
     grade_matches_submission = attr.ib(type=bool)
-    grade = None
-    comment = None
+    grade = attr.ib(type=Real, default=None)
+    comment = attr.ib(type=str, default='')
+    log = attr.ib(type=str, default='')
 
     def __attrs_post_init__(self):
-        self.grade = self.last_posted_grade
-        self.log = ''
-        self.comment = ''
+        if self.grade is None:
+            self.grade = self.last_posted_grade
 
     def __str__(self):
         grade = 'ungraded' if self.grade is None else self.grade
@@ -659,19 +657,23 @@ def choose_assignment(assignment_list) -> int:
     ).get('id')
 
 
-def choose_val(hi_num: int, allow_negative: bool = False, allow_zero: bool = False) -> int:
+def choose_val(hi_num: int, allow_negative: bool = False, allow_zero: bool = False, allow_float: bool = False) -> int:
     """
     Ask the user for a number and return the result if it is valid
     :param hi_num: The maximum number to allow
     :param allow_negative: Whether to allow negative numbers
-    :param allow_zero: Whether to allow zero or not
+    :param allow_zero: Whether to allow zero
+    :param allow_float: Whether to allow floating point values
     :return: The user's numeric input
     """
     for val in iter(input, None):
         if not val.isdigit():
             continue
 
-        i = int(val)
+        if allow_float:
+            i = float(val)
+        else:
+            i = int(val)
         if allow_negative:
             if not allow_zero and i == 0:
                 continue
@@ -694,6 +696,8 @@ def multiline_input() -> str:
     cur_inp = input()
     last_was_newline = False
     while not (last_was_newline and cur_inp == ''):
+        if final_inp != '' and cur_inp != '':
+            final_inp += '\n'
         final_inp += cur_inp
         if cur_inp == '':
             last_was_newline = True
@@ -740,6 +744,40 @@ def print_on_curline(msg: str):
     sys.stdout.flush()
     sys.stdout.write(msg)
     sys.stdout.flush()
+
+
+def save_state(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: List[User]):
+    global INSTALL_DIR
+
+    os.chdir(INSTALL_DIR)
+    cache_dir = os.path.join('.cache', str(grader.course_id), str(grader.assignment_id))
+    os.makedirs(cache_dir, exist_ok=True)
+    os.chdir(cache_dir)
+
+    if os.path.exists('temp'):
+        shutil.rmtree('temp')
+    shutil.copytree(os.path.join(INSTALL_DIR, 'temp'), 'temp')
+
+    with open('.cachefile', mode='w') as cache_file:
+        pprint.pprint(test_skeleton, stream=cache_file)
+        pprint.pprint(users, stream=cache_file)
+
+
+def load_state(course_id: int, assignment_id: int):
+    global INSTALL_DIR
+
+    os.chdir(INSTALL_DIR)
+    if os.path.exists('temp'):
+        shutil.rmtree('temp')
+
+    os.chdir(os.path.join('.cache', str(course_id), str(assignment_id)))
+    shutil.copytree('temp', os.path.join(INSTALL_DIR, 'temp'))
+    with open('.cachefile') as cache_file:
+        test_skeleton = eval(cache_file.readline())
+        users = eval(cache_file.readline())
+
+        os.chdir(INSTALL_DIR)
+        return test_skeleton, users
 
 
 def grade_all_submissions(test_skeleton: TestSkeleton, users: list, only_ungraded: bool = False):
@@ -804,7 +842,7 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
             user.submit_grade(grader)
         elif choice == possible_opts['modify']:
             print('Enter a new grade: ')
-            user.grade = choose_val(1000, allow_negative=True, allow_zero=True)
+            user.grade = choose_val(1000, allow_negative=True, allow_zero=True, allow_float=True)
         elif choice == possible_opts['comment']:
             cur_comment = user.comment
             if cur_comment == '':
@@ -822,7 +860,7 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
             return
 
 
-def main_menu(grader: PyCanvasGrader, course_id: int, assignment_id: int, test_skeleton: TestSkeleton, users: list):
+def main_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: list):
     print('Main Menu\n-')
     list_choices(users)
     print('-')
@@ -867,6 +905,7 @@ def main_menu(grader: PyCanvasGrader, course_id: int, assignment_id: int, test_s
                 print('There was an error reloading this skeleton. It has not been reloaded.')
                 print('Double-check the file\'s syntax, and make sure there are no typos.')
         elif selection == options['quit']:
+            save_state(grader, test_skeleton, users)
             close_program(grader)
 
 
@@ -931,14 +970,14 @@ def grade_assignment(grader: PyCanvasGrader, prefs: dict):
     quickstart = prefs['quickstart']
 
     # Get list of submissions for this assignment
-    submission_list = grader.submissions(course_id, assignment_id)
+    submission_list = grader.submissions()
     if len(submission_list) < 1:
         input('There are no submissions for this assignment. Press enter to restart')
         close_program(grader, restart=True)
 
-    ungraded_only = session.get('only_grade_ungraded')
+    ungraded_only = session.get('only_download_ungraded')
     if ungraded_only is None:
-        print('Only grade currently ungraded submissions? (y or n):')
+        print('Only download currently ungraded submissions? (y or n):')
         ungraded_only = choose_bool()
 
     # Create users from submissions
@@ -952,7 +991,7 @@ def grade_assignment(grader: PyCanvasGrader, prefs: dict):
         if submission.get('attachments') is not None:
             print_on_curline('downloading submissions... ({}/{})'.format(count, total))
             if grader.download_submission(submission, os.path.join('temp', str(user_id))):
-                user_data = grader.user(course_id, user_id)
+                user_data = grader.user(user_id)
                 users.append(User(user_id, submission['id'], user_data['name'], user_data.get('email'),
                                   submission['score'], submission['grade_matches_current_submission']))
             else:
@@ -976,13 +1015,16 @@ def grade_assignment(grader: PyCanvasGrader, prefs: dict):
 
     # Display main menu
     while True:
-        main_menu(grader, course_id, assignment_id, selected_skeleton, users)
+        main_menu(grader, selected_skeleton, users)
 
 
 def main():
+    global INSTALL_DIR
+
     if sys.version_info < (3, 5):
         print('Python 3.5+ is required')
         exit(1)
+    INSTALL_DIR = os.getcwd()
 
     init_tempdir()
     # Initialize grading session and fetch courses
@@ -990,7 +1032,29 @@ def main():
 
     prefs = load_prefs()
     grader.course_id, grader.assignment_id = startup(grader, prefs)
-    grade_assignment(grader, prefs)
+
+    if prefs['session'].get('look_for_cache'):
+        if os.path.exists(os.path.join('.cache', str(grader.course_id), str(grader.assignment_id))):
+            last_modified_secs = os.path.getmtime(os.path.join('.cache', str(grader.course_id), str(grader.assignment_id)))
+            last_modified = datetime.fromtimestamp(last_modified_secs).strftime('%b %d, %Y at %I:%M %p')
+            print('Found a cached version of this assignment from {}.'.format(last_modified))
+            print('Would you like to load it? (y or n)')
+            if choose_bool():
+                try:
+                    test_skeleton, users = load_state(grader.course_id, grader.assignment_id)
+                except:
+                    print('This cache is invalid, it will not be loaded.')
+                    grade_assignment(grader, prefs)
+                else:
+                    print('Loaded cached version of this grading session.')
+                    while True:
+                        main_menu(grader, test_skeleton, users)
+            else:
+                grade_assignment(grader, prefs)
+        else:
+            grade_assignment(grader, prefs)
+    else:
+        grade_assignment(grader, prefs)
 
 
 if __name__ == '__main__':
