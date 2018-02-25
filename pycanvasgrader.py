@@ -139,32 +139,70 @@ class PyCanvasGrader:
 
         return final_response
 
-    def download_submission(self, submission: dict, filepath: str) -> bool:
+    def submission(self, user_id: int) -> dict:
         """
-        Attempts to download the attachments for a given submission into the requested directory. Creates the directory if it does not exist.
+        Get information about a single submission
+        :param user_id: The user ID of the user whose submission is to be requested
+        :return: A dictionary which represents the submission object
+        """
+        url = 'https://sit.instructure.com/api/v1/courses/{}/assignments/{}/submissions/{}'.format(
+            self.course_id, self.assignment_id, user_id
+        )
+
+        response = self.session.get(url)
+        return json.loads(response.text)
+
+    def download_submission(self, submission: dict) -> bool:
+        """
+        Attempts to download the attachments for a given submission.
         :param submission: The submission dictionary
-        :param filepath: the path where the submission attachments will be placed
         :return: True if the request succeeded, False otherwise
         """
+        global INSTALL_DIR
+
         try:
             user_id = submission['user_id']
             attachments = submission['attachments']
         except ValueError:
             return False
 
-        for attachment in attachments:
-            try:
-                url = attachment['url']
-                filename = attachment['filename']
-            except ValueError:
-                return False
+        # First download everything to .new,
+        # then clear .temp/user_id,
+        # then move from .new to .temp/user_id.
+        # This ensures that the download is complete before overwriting.
+        try:
+            os.chdir(INSTALL_DIR)
+            os.makedirs(os.path.join('.temp', str(user_id), '.new'), exist_ok=True)
+            os.chdir(os.path.join('.temp', str(user_id), '.new'))
 
-            os.makedirs(os.path.join('.temp', str(user_id)), exist_ok=True)
-            r = self.session.get(url, stream=True)
-            with open(os.path.join(filepath, filename), 'wb') as f:
-                for chunk in r.iter_content(chunk_size=1024):
-                    if chunk:
-                        f.write(chunk)
+            for attachment in attachments:
+                try:
+                    url = attachment['url']
+                    filename = attachment['filename']
+                except ValueError:
+                    return False
+
+                r = self.session.get(url, stream=True)
+                with open(filename, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=1024):
+                        if chunk:
+                            f.write(chunk)
+
+            os.chdir('..')
+            for cur_file in os.listdir('.'):
+                if os.path.isfile(cur_file):
+                    os.remove(cur_file)
+
+            os.chdir('.new')
+            for cur_file in os.listdir('.'):
+                shutil.move(cur_file, '..')
+            os.chdir('..')
+            os.rmdir('.new')
+        except:
+            print('Unable work with files in the installation directory')
+            print('The program will likely not work as intended.')
+            print('Please close the program, ensure that it has permission to read and write in the current directory, and retry.')
+            return False
         return True
 
     def user(self, user_id: int) -> dict:
@@ -436,6 +474,9 @@ class TestSkeleton:
 
     @classmethod
     def from_file(cls, filename, skeleton_dir='skeletons') -> 'TestSkeleton':
+        global INSTALL_DIR
+        os.chdir(INSTALL_DIR)
+
         try:
             with open(os.path.join(skeleton_dir, filename)) as skeleton_file:
                 try:
@@ -528,6 +569,7 @@ class User:
     email = attr.ib(type=str)
     last_posted_grade = attr.ib(type=Real)
     grade_matches_submission = attr.ib(type=bool)
+    attempt = attr.ib(type=int)
     grade = attr.ib(type=Real, default=None)
     comment = attr.ib(type=str, default='')
     log = attr.ib(type=str, default='')
@@ -549,8 +591,6 @@ class User:
         return self.grade == self.last_posted_grade
 
     def grade_self(self, test_skeleton: TestSkeleton):
-        global INSTALL_DIR
-
         grade = test_skeleton.run_tests(self)
         if grade is None:
             return
@@ -558,13 +598,26 @@ class User:
             if grade != self.grade:
                 self.grade = grade
 
-        os.chdir(INSTALL_DIR)
-
     def submit_grade(self, grader: PyCanvasGrader):
-        if not self.submitted:
-            grader.grade_submission(self.user_id, self.grade)
-            grader.comment_on_submission(self.user_id, self.comment)
-            self.last_posted_grade = self.grade
+        grader.grade_submission(self.user_id, self.grade)
+        grader.comment_on_submission(self.user_id, self.comment)
+        self.last_posted_grade = self.grade
+
+    def update(self, grader: PyCanvasGrader) -> bool:
+
+        new_submission = grader.submission(self.user_id)
+        if new_submission['attempt'] > self.attempt:
+            if grader.download_submission(new_submission):
+                # noinspection PyArgumentList
+                self.__init__(user_id=self.user_id,
+                              submission_id=new_submission['id'],
+                              name=self.name,
+                              email=self.email,
+                              last_posted_grade=new_submission['score'],
+                              grade_matches_submission=new_submission['grade_matches_current_submission'],
+                              attempt=new_submission['attempt'])
+                return True
+        return False
 
 
 def parse_skeleton(skeleton_file: str) -> TestSkeleton:
@@ -580,6 +633,9 @@ def parse_skeletons() -> list:
     Responsible for validating and parsing the skeleton files in the "skeletons" directory
     :return: A list of valid skeletons
     """
+    global INSTALL_DIR
+
+    os.chdir(INSTALL_DIR)
     skeleton_list = []
     for skeleton_file in os.listdir('skeletons'):
         skeleton = parse_skeleton(skeleton_file)
@@ -841,6 +897,7 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
         'submit': 'Submit this grade',
         'modify': 'Modify this user\'s grade',
         'comment': 'Edit the comment for this grade',
+        'update': 'Update this user\'s submission',
         'clear': 'Clear this user\'s grade',
         'back': 'Return to the main menu'
     }
@@ -852,10 +909,11 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
             options.append(possible_opts['log'])
         else:
             options.append(possible_opts['run'])
-        if not user.submitted:
+        if not user.submitted or not user.grade_matches_submission:
             options.append(possible_opts['submit'])
         options.append(possible_opts['modify'])
         options.append(possible_opts['comment'])
+        options.append(possible_opts['update'])
         if user.grade is not None:
             options.append(possible_opts['clear'])
         options.append(possible_opts['back'])
@@ -877,6 +935,9 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
         elif choice == possible_opts['submit']:
             submitted_before = user.submitted
             user.submit_grade(grader)
+            if not user.grade_matches_submission:
+                user.grade_matches_submission = True
+                CURRENTLY_SAVED = False
             if user.submitted != submitted_before:
                 CURRENTLY_SAVED = False
         elif choice == possible_opts['modify']:
@@ -898,6 +959,12 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
                 user.comment = inp
                 if user.comment != cur_comment:
                     CURRENTLY_SAVED = False
+        elif choice == possible_opts['update']:
+            if user.update(grader):
+                CURRENTLY_SAVED = False
+                print('A new submission has been downloaded for this user.')
+            else:
+                print('No available updates for this user.')
         elif choice == possible_opts['clear']:
             grade_before = user.grade
             user.grade = None
@@ -1066,15 +1133,15 @@ def grade_assignment(grader: PyCanvasGrader, prefs: dict):
     total = len(submission_list)
     failed = 0
     for count, submission in enumerate(submission_list):
-        if ungraded_only and submission['grader_matches_current_submission'] and submission['score'] is not None:
+        if ungraded_only and submission['grade_matches_current_submission'] and submission['score'] is not None:
             continue
         user_id = submission.get('user_id')
         if submission.get('attachments') is not None:
             print_on_curline('downloading submissions... ({}/{})'.format(count, total))
-            if grader.download_submission(submission, os.path.join('.temp', str(user_id))):
+            if grader.download_submission(submission):
                 user_data = grader.user(user_id)
                 users.append(User(user_id, submission['id'], user_data['name'], user_data.get('email'),
-                                  submission['score'], submission['grade_matches_current_submission']))
+                                  submission['score'], submission['grade_matches_current_submission'], submission['attempt']))
             else:
                 failed += 1
     print_on_curline('Submissions downloaded. ({} total, {} failed to validate)\n\n'.format(total, failed))
@@ -1093,6 +1160,8 @@ def grade_assignment(grader: PyCanvasGrader, prefs: dict):
             'Choose a skeleton to use for grading this assignment:',
             formatter=lambda skel: skel.descriptor
         )
+    if not session.get('disable_autosave'):
+        save_state(grader, selected_skeleton, users)
 
     # Display main menu
     while True:
