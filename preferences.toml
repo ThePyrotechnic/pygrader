@@ -1,9 +1,0 @@
-[session]
-prompt_to_save = true
-only_show_ungraded = false
-only_grade_ungraded = false
-
-[quickstart]
-role = "teacher"
-course_id = 133
-skeleton = "HW1d.json"
