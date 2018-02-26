@@ -32,7 +32,7 @@ import re
 import shutil
 import subprocess
 import sys
-import importlib
+from importlib import util
 from datetime import datetime
 from numbers import Real
 from typing import Callable, Dict, List, Sequence, Tuple, TypeVar
@@ -42,7 +42,7 @@ import attr
 import requests
 import toml
 
-if importlib.util.find_spec('py'):
+if util.find_spec('py'):
     import py
 
 # globals
@@ -834,7 +834,7 @@ def save_state(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: List[
             pprint.pprint(test_skeleton, stream=cache_file)
             pprint.pprint(users, stream=cache_file)
 
-        print_on_curline('State saved.\n')
+        print_on_curline('State saved.    \n')
         CURRENTLY_SAVED = True
         os.chdir(INSTALL_DIR)
     except:
@@ -926,13 +926,16 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
         choice = choose(options)
 
         if choice == possible_opts['log']:
+            os.system('cls' if os.name == 'nt' else 'clear')
             print(user.log)
         elif choice in (possible_opts['rerun'], possible_opts['run']):
+            os.system('cls' if os.name == 'nt' else 'clear')
             grade_before = user.grade
             user.grade_self(test_skeleton)
             if user.grade != grade_before:
                 CURRENTLY_SAVED = False
         elif choice == possible_opts['submit']:
+            os.system('cls' if os.name == 'nt' else 'clear')
             submitted_before = user.submitted
             user.submit_grade(grader)
             if not user.grade_matches_submission:
@@ -946,6 +949,7 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
             user.grade = choose_val(1000, allow_negative=True, allow_zero=True, allow_float=True)
             if user.grade != grade_before:
                 CURRENTLY_SAVED = False
+            os.system('cls' if os.name == 'nt' else 'clear')
         elif choice == possible_opts['comment']:
             cur_comment = user.comment
             if cur_comment == '':
@@ -959,18 +963,22 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
                 user.comment = inp
                 if user.comment != cur_comment:
                     CURRENTLY_SAVED = False
+            os.system('cls' if os.name == 'nt' else 'clear')
         elif choice == possible_opts['update']:
+            os.system('cls' if os.name == 'nt' else 'clear')
             if user.update(grader):
                 CURRENTLY_SAVED = False
                 print('A new submission has been downloaded for this user.')
             else:
                 print('No available updates for this user.')
         elif choice == possible_opts['clear']:
+            os.system('cls' if os.name == 'nt' else 'clear')
             grade_before = user.grade
             user.grade = None
             if user.grade != grade_before:
                 CURRENTLY_SAVED = False
         elif choice == possible_opts['back']:
+            os.system('cls' if os.name == 'nt' else 'clear')
             return
 
 
@@ -1013,32 +1021,39 @@ def main_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: list, 
     choice = choose_val(len(opt_list) + len(users))
 
     if choice <= len(users):
+        os.system('cls' if os.name == 'nt' else 'clear')
         user_menu(grader, test_skeleton, users[choice - 1])
     else:
         selection = opt_list[choice - len(users) - 1]
         if selection == options['grade_all']:
+            os.system('cls' if os.name == 'nt' else 'clear')
             success = grade_all_submissions(test_skeleton, users)
             if success and not CURRENTLY_SAVED and not prefs['session'].get('disable_autosave'):
                 save_state(grader, test_skeleton, users)
             elif success:
                 CURRENTLY_SAVED = False
         elif selection == options['grade_ungraded']:
+            os.system('cls' if os.name == 'nt' else 'clear')
             success = grade_all_submissions(test_skeleton, users, only_ungraded=True)
             if success and not CURRENTLY_SAVED and not prefs['session'].get('disable_autosave'):
                 save_state(grader, test_skeleton, users)
             elif success:
                 CURRENTLY_SAVED = False
         elif selection == options['submit_all']:
+            os.system('cls' if os.name == 'nt' else 'clear')
             modified = submit_all_grades(grader, users)
             if modified:
                 CURRENTLY_SAVED = False
         elif selection == options['reload_skeleton']:
+            os.system('cls' if os.name == 'nt' else 'clear')
             if not test_skeleton.reload():
                 print('There was an error reloading this skeleton. It has not been reloaded.')
                 print('Double-check the file\'s syntax, and make sure there are no typos.')
             else:
+                print('Successfully reloaded the test skeleton.')
                 CURRENTLY_SAVED = False
         elif selection == options['save']:
+            os.system('cls' if os.name == 'nt' else 'clear')
             if not CURRENTLY_SAVED:
                 save_state(grader, test_skeleton, users)
             else:
@@ -1132,6 +1147,8 @@ def grade_assignment(grader: PyCanvasGrader, prefs: dict):
     users = []
     total = len(submission_list)
     failed = 0
+
+    os.system('cls' if os.name == 'nt' else 'clear')
     for count, submission in enumerate(submission_list):
         if ungraded_only and submission['grade_matches_current_submission'] and submission['score'] is not None:
             continue
@@ -1174,6 +1191,9 @@ def main():
     if sys.version_info < (3, 5):
         print('Python 3.5+ is required')
         exit(1)
+
+    os.system('cls' if os.name == 'nt' else 'clear')
+
     INSTALL_DIR = os.getcwd()
 
     init_tempdir()
