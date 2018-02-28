@@ -23,7 +23,6 @@ Options:
     --skeleton=<skeleton>
 """
 # built-ins
-import pprint
 from enum import Enum
 import json
 import os
@@ -831,8 +830,8 @@ def save_state(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: List[
         shutil.copytree(os.path.join(INSTALL_DIR, '.temp'), '.temp')
 
         with open('.cachefile', mode='w') as cache_file:
-            pprint.pprint(test_skeleton, stream=cache_file)
-            pprint.pprint(users, stream=cache_file)
+            print(test_skeleton, file=cache_file)
+            print(users, file=cache_file)
 
         print_on_curline('State saved.    \n')
         CURRENTLY_SAVED = True
@@ -1103,7 +1102,7 @@ def startup(grader: PyCanvasGrader, prefs: dict) -> (int, int):
 
     grader.course_id = course_id
 
-    if session.get('prompt_to_save') and \
+    if not session.get('no_save_prompt') and \
             (not quickstart.get('course_id') or not quickstart.get('role')):
         print('Save these settings for faster startup next time? (y or n):')
         if choose_bool():
@@ -1203,7 +1202,7 @@ def main():
     prefs = load_prefs()
     grader.course_id, grader.assignment_id = startup(grader, prefs)
 
-    if prefs['session'].get('look_for_cache') and os.path.exists(grader.cache_file):
+    if not prefs['session'].get('ignore_cache') and os.path.exists(grader.cache_file):
         last_modified = datetime.fromtimestamp(os.path.getmtime(grader.cache_file))
         print('Found a cached version of this assignment from',
               '{:%b %d, %Y at %I:%M %p.}'.format(last_modified))
