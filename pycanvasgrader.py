@@ -116,7 +116,7 @@ class PyCanvasGrader:
         :param ungraded: Whether to filter assignments by only those that have ungraded work. Default: True
         :return: A list of the course's assignments
         """
-        url = 'https://sit.instructure.com/api/v1/courses/' + str(self.course_id) + '/assignments?per_page=100'
+        url = 'fhttps://sit.instructure.com/api/v1/courses/{self.course_id}/assignments?per_page=100'
         if ungraded:
             url += '&bucket=ungraded'
 
@@ -127,8 +127,8 @@ class PyCanvasGrader:
         """
         :return: A list of the assignment's submissions
         """
-        url = 'https://sit.instructure.com/api/v1/courses/' + str(self.course_id) + '/assignments/' + str(
-            self.assignment_id) + '/submissions?per_page=100'
+        url = (f'https://sit.instructure.com/api/v1/courses/{self.course_id}'
+               f'/assignments/{self.assignment_id}/submissions?per_page=100')
 
         response = self.session.get(url)
         final_response = json.loads(response.text)
@@ -144,9 +144,8 @@ class PyCanvasGrader:
         :param user_id: The user ID of the user whose submission is to be requested
         :return: A dictionary which represents the submission object
         """
-        url = 'https://sit.instructure.com/api/v1/courses/{}/assignments/{}/submissions/{}'.format(
-            self.course_id, self.assignment_id, user_id
-        )
+        url = (f'https://sit.instructure.com/api/v1/courses/'
+               f'{self.course_id}/assignments/{self.assignment_id}/submissions/{user_id}')
 
         response = self.session.get(url)
         return json.loads(response.text)
@@ -209,7 +208,7 @@ class PyCanvasGrader:
         :param user_id: The ID of the user
         :return: A dictionary with the user's information
         """
-        url = 'https://sit.instructure.com/api/v1/courses/%i/users/%i' % (self.course_id, user_id)
+        url = f'https://sit.instructure.com/api/v1/courses/{self.course_id}/users/{user_id}'
 
         response = self.session.get(url)
         return json.loads(response.text)
@@ -218,26 +217,46 @@ class PyCanvasGrader:
         global DISARM_ALL, DISARM_GRADER
         if grade is None:
             grade = 'NaN'
-        url = 'https://sit.instructure.com/api/v1/courses/%i/assignments/%i/submissions/%i/?submission[posted_grade]=%s' \
-              % (self.course_id, self.assignment_id, user_id, str(grade))
+        url = (f'https://sit.instructure.com/api/v1/courses/{self.course_id}/assignments/{self.assignment_id}'
+               f'submissions/{user_id}/?submission[posted_grade]={grade}')
 
         if DISARM_ALL or DISARM_GRADER:
             print('Grader disarmed; grade will not actually be submitted')
-            return 'dummy success'
-        else:
-            response = self.session.put(url)
-            return json.loads(response.text)
+            return
+
+        response = self.session.put(url)
+        return json.loads(response.text)
+
+    def grade_submissions(self, user_ids_and_grades: List[Tuple[int, int, str]]):
+        url = (f'https://sit.instructure.com/api/v1/courses/'
+               f'{self.course_id}/assignments/{self.assignment_id}submissions/update_grades')
+
+        if DISARM_ALL or DISARM_GRADER:
+            print('Grader disarmed; grades will not actually be submitted')
+            return
+
+        data = {}
+        for user_id, grade, comment in user_ids_and_grades:
+            grade = grade or 'NaN'
+
+            data[f'grade_data[{user_id}][posted_grade]'] = grade
+
+            if comment != '':
+                data[f'grade_data[{user_id}][text_comment]'] = comment
+
+        response = self.session.post(url, data=data)
+        return response
 
     def comment_on_submission(self, user_id: int, comment: str):
         global DISARM_ALL, DISARM_MESSAGER
-        url = 'https://sit.instructure.com/api/v1/courses/%i/assignments/%i/submissions/%i/?comment[text_comment]=%s' \
-              % (self.course_id, self.assignment_id, user_id, comment)
+        url = (f'https://sit.instructure.com/api/v1/courses/{self.course_id}/assignments/{self.assignment_id}'
+               f'/submissions/{user_id}/?comment[text_comment]={comment}')
 
         if DISARM_ALL or DISARM_MESSAGER:
-            return 'dummy success'
-        else:
-            response = self.session.put(url)
-            return json.loads(response.text)
+            return
+
+        response = self.session.put(url)
+        return json.loads(response.text)
 
     def message_user(self, recipient_id: int, body: str, subject: str = None):
         global DISARM_ALL, DISARM_MESSAGER
@@ -250,10 +269,9 @@ class PyCanvasGrader:
         }
 
         if DISARM_ALL or DISARM_MESSAGER:
-            print('Messenger disarmed; user wil not actually be messaged')
             return 'dummy success'
         else:
-            response = self.session.post(url, data)
+            response = self.session.post(url, data=data)
             return json.loads(response.text)
 
     @property
@@ -878,10 +896,14 @@ def grade_all_submissions(test_skeleton: TestSkeleton, users: List[User], only_u
 
 def submit_all_grades(grader: PyCanvasGrader, users: list) -> bool:
     modified = False
+    user_data = []
     for user in users:
         if not user.submitted:
-            user.submit_grade(grader)
+            user_data.append((user.user_id, user.grade, user.comment))
             modified = True
+            user.last_posted_grade = user.grade
+    if len(user_data) > 0:
+        grader.grade_submissions(user_data)
     return modified
 
 
