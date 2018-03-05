@@ -5,11 +5,11 @@
 # If any of these options are invalid or unknown,
 # then they will be assumed to be false.
 
-# If true, look for cached versions of the selected assignment
-look_for_cache = true
+# If true, don't look for cached versions of the selected assignment
+ignore_cache = false
 
-# If true, after choosing role and course id, prompt to save these choices
-prompt_to_save = true
+# If true, after choosing role and course id, don't prompt to save these choices
+no_save_prompt = false
 
 # If true, when downloading submissions, only download submissions that are currently ungraded
 only_download_ungraded = false
