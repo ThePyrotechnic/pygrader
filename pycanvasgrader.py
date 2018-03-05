@@ -116,7 +116,7 @@ class PyCanvasGrader:
         :param ungraded: Whether to filter assignments by only those that have ungraded work. Default: True
         :return: A list of the course's assignments
         """
-        url = 'fhttps://sit.instructure.com/api/v1/courses/{self.course_id}/assignments?per_page=100'
+        url = f'https://sit.instructure.com/api/v1/courses/{self.course_id}/assignments?per_page=100'
         if ungraded:
             url += '&bucket=ungraded'
 
@@ -229,7 +229,7 @@ class PyCanvasGrader:
 
     def grade_submissions(self, user_ids_and_grades: List[Tuple[int, int, str]]):
         url = (f'https://sit.instructure.com/api/v1/courses/'
-               f'{self.course_id}/assignments/{self.assignment_id}submissions/update_grades')
+               f'{self.course_id}/assignments/{self.assignment_id}/submissions/update_grades')
 
         if DISARM_ALL or DISARM_GRADER:
             print('Grader disarmed; grades will not actually be submitted')
@@ -341,6 +341,7 @@ class AssignmentTest:
     print_output = option(True)
     negate_match = option()
     exact_match = option()
+    prompt_for_score = option()
 
     # The name of the test case
     name = attr.ib(None, type=str)
@@ -559,7 +560,13 @@ class TestSkeleton:
 
         for count, test in enumerate(self.tests, 1):
             user.log += '\n--Running test %i--\n' % count
+
+            if test.prompt_for_score:
+                print('\nUser:', user.name)
             if test.run_and_match(user):
+                if test.prompt_for_score:
+                    print('Enter the score for this test:')
+                    total_score += choose_val(1000, allow_negative=True, allow_zero=True, allow_float=True)
                 if test.point_val > 0:
                     user.log += '--Adding %i points--\n' % test.point_val
                 elif test.point_val == 0:
@@ -600,8 +607,8 @@ class User:
         submit_status = 'posted' if self.submitted else 'not posted'
         if not self.grade_matches_submission:
             submit_status += ' - needs re-grading (new submission)'
-        email = self.email or 'No email'
-        return '{} ({}): {} [{}]'.format(self.name, email, grade, submit_status)
+        email = f'({self.email})' if self.email else ''
+        return '{} {}: {} [{}]'.format(self.name, email, grade, submit_status)
 
     @property
     def submitted(self):
@@ -917,7 +924,8 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
         'run': 'Run tests',
         'submit': 'Submit this grade',
         'modify': 'Modify this user\'s grade',
-        'comment': 'Edit the comment for this grade',
+        'comment': 'View or edit the comment for this grade',
+        'clear-comment': 'Clear the current comment',
         'update': 'Update this user\'s submission',
         'clear': 'Clear this user\'s grade',
         'back': 'Return to the main menu'
@@ -934,6 +942,8 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
             options.append(possible_opts['submit'])
         options.append(possible_opts['modify'])
         options.append(possible_opts['comment'])
+        if user.comment != '':
+            options.append(possible_opts['clear-comment'])
         options.append(possible_opts['update'])
         if user.grade is not None:
             options.append(possible_opts['clear'])
@@ -979,11 +989,16 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
                 print('Current comment:')
                 print(user.comment)
             print('Type the new comment below, and press enter twice when you are finished.')
+            print('Entering a blank comment here will not clear the current comment.')
             inp = multiline_input()
             if inp != '':
                 user.comment = inp
                 if user.comment != cur_comment:
                     CURRENTLY_SAVED = False
+            os.system('cls' if os.name == 'nt' else 'clear')
+        elif choice == possible_opts['clear-comment']:
+            user.comment = ''
+            CURRENTLY_SAVED = False
             os.system('cls' if os.name == 'nt' else 'clear')
         elif choice == possible_opts['update']:
             os.system('cls' if os.name == 'nt' else 'clear')
@@ -1049,14 +1064,14 @@ def main_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: list, 
         if selection == options['grade_all']:
             os.system('cls' if os.name == 'nt' else 'clear')
             success = grade_all_submissions(test_skeleton, users)
-            if success and not CURRENTLY_SAVED and not prefs['session'].get('disable_autosave'):
+            if success and not prefs['session'].get('disable_autosave'):
                 save_state(grader, test_skeleton, users)
             elif success:
                 CURRENTLY_SAVED = False
         elif selection == options['grade_ungraded']:
             os.system('cls' if os.name == 'nt' else 'clear')
             success = grade_all_submissions(test_skeleton, users, only_ungraded=True)
-            if success and not CURRENTLY_SAVED and not prefs['session'].get('disable_autosave'):
+            if success and not prefs['session'].get('disable_autosave'):
                 save_state(grader, test_skeleton, users)
             elif success:
                 CURRENTLY_SAVED = False
@@ -1227,7 +1242,7 @@ def main():
     if not prefs['session'].get('ignore_cache') and os.path.exists(grader.cache_file):
         last_modified = datetime.fromtimestamp(os.path.getmtime(grader.cache_file))
         print('Found a cached version of this assignment from',
-              '{:%b %d, %Y at %I:%M %p.}'.format(last_modified))
+              '{:%b %d, %Y at %I:%M%p.}'.format(last_modified))
         print('Would you like to load it? (y or n)')
         if choose_bool():
             try:
