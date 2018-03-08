@@ -24,6 +24,7 @@ Options:
 """
 # built-ins
 from enum import Enum
+from io import StringIO
 import json
 import os
 import pathlib
@@ -75,7 +76,7 @@ class PyCanvasGrader:
         self.assignment_id = assignment_id
 
     def __repr__(self):
-        return 'PyCanvasGrader(course_id={}, assignment_id={})'.format(self.course_id, self.assignment_id)
+        return f'PyCanvasGrader(course_id={self.course_id}, assignment_id={self.assignment_id})'
 
     @staticmethod
     def authenticate() -> str:
@@ -378,6 +379,7 @@ class AssignmentTest:
         command = self.command
         args = self.args
         filename = self.target_file
+
         if filename is None:
             if self.single_file and len(os.listdir(os.getcwd())) > 0:
                 filename = os.listdir(os.getcwd())[0]
@@ -390,11 +392,10 @@ class AssignmentTest:
             filename = os.path.splitext(filename)[0]
         if filename is not None:
             if self.print_file:
-                user.log += '--FILE--\n'
+                print('--FILE--', file=user.log)
                 with open(filename, 'r') as f:
-                    file_as_str = f.read()
-                    user.log += file_as_str
-                user.log += '--END FILE--\n'
+                    print(f.read(), file=user.log)
+                print('--END FILE--', file=user.log)
             command = self.command.replace('%s', filename)
             if args is not None:
                 args = [arg.replace('%s', filename) for arg in args]
@@ -429,9 +430,9 @@ class AssignmentTest:
             return False
 
         if self.print_output:
-            user.log += '\t--OUTPUT--\n'
-            user.log += result['stdout']
-            user.log += '\n\t--END OUTPUT--\n'
+            print('\t--OUTPUT--', file=user.log)
+            print(result['stdout'], file=user.log)
+            print('\n\t--END OUTPUT--', file=user.log)
         if not any((self.output_match, self.output_regex, self.numeric_match)):
             return True
 
@@ -443,15 +444,17 @@ class AssignmentTest:
                 for num in numeric_match:
                     if isinstance(num, str):
                         numeric_match.remove(num)
-                        range_vals = list(map(float, re.findall(NUM_REGEX, num)))
-                        if len(range_vals) != 2:
+                        try:
+                            center, diff = (float(x) for x in re.findall(NUM_REGEX, num))
+                        except:
                             continue
-                        num = [range_vals[0] - range_vals[1], range_vals[0] + range_vals[1]]
+                        num = [center - diff, center + diff]
                         numeric_match.append(num)
                     if isinstance(num, list):
-                        if num[0] <= number <= num[1]:
+                        low, high = num
+                        if low <= number <= high:
                             numeric_match.remove(num)
-                    elif isinstance(num, (int, float)):
+                    elif isinstance(num, Real):
                         if number == num:
                             numeric_match.remove(num)
 
@@ -459,7 +462,7 @@ class AssignmentTest:
 
         if self.output_regex:
             if self.output_regex.match(result['stdout']):
-                user.log += '--Matched regular expression--\n'
+                print('--Matched regular expression--', file=user.log)
                 if self.negate_match:
                     return False
                 return True
@@ -471,7 +474,7 @@ class AssignmentTest:
                 condition = self.output_match in result['stdout']
 
             if condition:
-                user.log += '--Matched string comparison--\n'
+                print('--Matched string comparison--', file=user.log)
                 if self.negate_match:
                     return False
                 return True
@@ -550,16 +553,14 @@ class TestSkeleton:
 
         total_score = 0
 
-        user.log = ''
-
         try:
             os.chdir(os.path.join(INSTALL_DIR, '.temp', str(user_id)))
         except (WindowsError, OSError):
-            user.log += 'Could not access files for user "%i". Skipping\n' % user_id
+            print('Could not access files for user "%i". Skipping' % user_id, file=user.log)
             return None
 
         for count, test in enumerate(self.tests, 1):
-            user.log += '\n--Running test %i--\n' % count
+            print('\n--Running test %i--' % count, file=user.log)
 
             if test.prompt_for_score:
                 print('\nUser:', user.name)
@@ -568,20 +569,21 @@ class TestSkeleton:
                     print('Enter the score for this test:')
                     total_score += choose_val(1000, allow_negative=True, allow_zero=True, allow_float=True)
                 if test.point_val > 0:
-                    user.log += '--Adding %i points--\n' % test.point_val
+                    print('--Adding %i points--' % test.point_val, user.log)
                 elif test.point_val == 0:
-                    user.log += '--No points set for this test--\n'
+                    print('--No points set for this test--', user.log)
                 else:
-                    user.log += '--Subtracting %i points--\n' % abs(test.point_val)
+                    print('--Subtracting %i points--' % abs(test.point_val), file=user.log)
                 total_score += test.point_val
             else:
-                user.log += '--Test failed--\n'
+                print('--Test failed--', file=user.log)
                 if test.fail_comment:
                     user.comment += test.fail_comment + '\n'
                 if test.test_must_pass:
                     break
 
-            user.log += '--Current score: %i--\n' % total_score
+            print('--Current score: %i--' % total_score, file=user.log)
+
         return total_score
 
 
@@ -596,7 +598,9 @@ class User:
     attempt = attr.ib(type=int)
     grade = attr.ib(type=Real, default=None)
     comment = attr.ib(type=str, default='')
-    log = attr.ib(type=str, default='')
+    # Used like a StringBuilder in Java to more efficiently build large strings.
+    # But also fulfills the file protocol in Python so is writable like a file.
+    log = attr.ib(default=attr.Factory(StringIO), init=False, type=StringIO)
 
     def __attrs_post_init__(self):
         if self.grade is None:
@@ -758,14 +762,10 @@ def choose_val(hi_num: int, allow_negative: bool = False, allow_zero: bool = Fal
     """
     for val in iter(input, None):
         try:
-            float(val)
+            i = float(val) if allow_float else int(val)
         except ValueError:
             continue
 
-        if allow_float:
-            i = float(val)
-        else:
-            i = int(val)
         if allow_negative:
             if not allow_zero and i == 0:
                 continue
@@ -895,9 +895,9 @@ def grade_all_submissions(test_skeleton: TestSkeleton, users: List[User], only_u
     total = len(users)
 
     for count, user in enumerate(users):
-        print_on_curline('grading ({}/{})'.format(count, total))
+        print_on_curline(f'grading ({count}/{total})')
         user.grade_self(test_skeleton)
-    print_on_curline('grading complete ({0}/{0})\n'.format(total))
+    print_on_curline(f'grading complete ({total}/{total})\n')
     return True
 
 
@@ -912,6 +912,13 @@ def submit_all_grades(grader: PyCanvasGrader, users: list) -> bool:
     if len(user_data) > 0:
         grader.grade_submissions(user_data)
     return modified
+
+
+def clear_screen():
+    """
+    Clear the screen.
+    """
+    os.system('cls' if os.name == 'nt' else 'clear')
 
 
 def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
@@ -933,7 +940,7 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
 
     while True:
         options = []
-        if user.log != '':
+        if user.log.getvalue() != '':
             options.append(possible_opts['rerun'])
             options.append(possible_opts['log'])
         else:
@@ -957,16 +964,16 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
         choice = choose(options)
 
         if choice == possible_opts['log']:
-            os.system('cls' if os.name == 'nt' else 'clear')
-            print(user.log)
+            clear_screen()
+            print(user.log.getvalue())
         elif choice in (possible_opts['rerun'], possible_opts['run']):
-            os.system('cls' if os.name == 'nt' else 'clear')
+            clear_screen()
             grade_before = user.grade
             user.grade_self(test_skeleton)
             if user.grade != grade_before:
                 CURRENTLY_SAVED = False
         elif choice == possible_opts['submit']:
-            os.system('cls' if os.name == 'nt' else 'clear')
+            clear_screen()
             submitted_before = user.submitted
             user.submit_grade(grader)
             if not user.grade_matches_submission:
@@ -980,7 +987,7 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
             user.grade = choose_val(1000, allow_negative=True, allow_zero=True, allow_float=True)
             if user.grade != grade_before:
                 CURRENTLY_SAVED = False
-            os.system('cls' if os.name == 'nt' else 'clear')
+            clear_screen()
         elif choice == possible_opts['comment']:
             cur_comment = user.comment
             if cur_comment == '':
@@ -995,26 +1002,26 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
                 user.comment = inp
                 if user.comment != cur_comment:
                     CURRENTLY_SAVED = False
-            os.system('cls' if os.name == 'nt' else 'clear')
+            clear_screen()
         elif choice == possible_opts['clear-comment']:
             user.comment = ''
             CURRENTLY_SAVED = False
-            os.system('cls' if os.name == 'nt' else 'clear')
+            clear_screen()
         elif choice == possible_opts['update']:
-            os.system('cls' if os.name == 'nt' else 'clear')
+            clear_screen()
             if user.update(grader):
                 CURRENTLY_SAVED = False
                 print('A new submission has been downloaded for this user.')
             else:
                 print('No available updates for this user.')
         elif choice == possible_opts['clear']:
-            os.system('cls' if os.name == 'nt' else 'clear')
+            clear_screen()
             grade_before = user.grade
             user.grade = None
             if user.grade != grade_before:
                 CURRENTLY_SAVED = False
         elif choice == possible_opts['back']:
-            os.system('cls' if os.name == 'nt' else 'clear')
+            clear_screen()
             return
 
 
@@ -1057,39 +1064,39 @@ def main_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: list, 
     choice = choose_val(len(opt_list) + len(users))
 
     if choice <= len(users):
-        os.system('cls' if os.name == 'nt' else 'clear')
+        clear_screen()
         user_menu(grader, test_skeleton, users[choice - 1])
     else:
         selection = opt_list[choice - len(users) - 1]
         if selection == options['grade_all']:
-            os.system('cls' if os.name == 'nt' else 'clear')
+            clear_screen()
             success = grade_all_submissions(test_skeleton, users)
             if success and not prefs['session'].get('disable_autosave'):
                 save_state(grader, test_skeleton, users)
             elif success:
                 CURRENTLY_SAVED = False
         elif selection == options['grade_ungraded']:
-            os.system('cls' if os.name == 'nt' else 'clear')
+            clear_screen()
             success = grade_all_submissions(test_skeleton, users, only_ungraded=True)
             if success and not prefs['session'].get('disable_autosave'):
                 save_state(grader, test_skeleton, users)
             elif success:
                 CURRENTLY_SAVED = False
         elif selection == options['submit_all']:
-            os.system('cls' if os.name == 'nt' else 'clear')
+            clear_screen()
             modified = submit_all_grades(grader, users)
             if modified:
                 CURRENTLY_SAVED = False
         elif selection == options['reload_skeleton']:
-            os.system('cls' if os.name == 'nt' else 'clear')
+            clear_screen()
             if not test_skeleton.reload():
                 print('There was an error reloading this skeleton. It has not been reloaded.')
-                print('Double-check the file\'s syntax, and make sure there are no typos.')
+                print("Double-check the file's syntax, and make sure there are no typos.")
             else:
                 print('Successfully reloaded the test skeleton.')
                 CURRENTLY_SAVED = False
         elif selection == options['save']:
-            os.system('cls' if os.name == 'nt' else 'clear')
+            clear_screen()
             if not CURRENTLY_SAVED:
                 save_state(grader, test_skeleton, users)
             else:
@@ -1184,7 +1191,7 @@ def grade_assignment(grader: PyCanvasGrader, prefs: dict):
     total = len(submission_list)
     failed = 0
 
-    os.system('cls' if os.name == 'nt' else 'clear')
+    clear_screen()
     for count, submission in enumerate(submission_list):
         if ungraded_only and submission['grade_matches_current_submission'] and submission['score'] is not None:
             continue
@@ -1228,7 +1235,7 @@ def main():
         print('Python 3.5+ is required')
         exit(1)
 
-    os.system('cls' if os.name == 'nt' else 'clear')
+    clear_screen()
 
     INSTALL_DIR = os.getcwd()
 
@@ -1242,7 +1249,7 @@ def main():
     if not prefs['session'].get('ignore_cache') and os.path.exists(grader.cache_file):
         last_modified = datetime.fromtimestamp(os.path.getmtime(grader.cache_file))
         print('Found a cached version of this assignment from',
-              '{:%b %d, %Y at %I:%M%p.}'.format(last_modified))
+              f'{last_modified:%b %d, %Y at %I:%M%p.}')
         print('Would you like to load it? (y or n)')
         if choose_bool():
             try:
