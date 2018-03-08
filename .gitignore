@@ -8,3 +8,4 @@ skeletons/*
 *~
 *.swp
 *.bak
+__pycache__/*
