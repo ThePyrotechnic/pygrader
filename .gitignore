@@ -5,3 +5,7 @@
 preferences.toml
 skeletons/*
 !skeletons/.gitignore
+*~
+*.swp
+*.bak
+__pycache__/*
