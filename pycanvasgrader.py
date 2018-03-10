@@ -482,6 +482,16 @@ class AssignmentTest:
         return self.negate_match
 
 
+    def to_json(self):
+        """
+        Encode an AssignmentTest object as a JSON-compatible dictionary.
+        """
+        attributes = attrs.asdict(self)
+        if self.output_regex:
+            attributes['output_regex'] = self.output_regex.pattern
+        return attributes
+
+
 @attr.s
 class TestSkeleton:
     """
@@ -587,6 +597,32 @@ class TestSkeleton:
         return total_score
 
 
+    def to_json(self):
+        """
+        Return a new dictionary to represent the state of the skeleton in a
+        JSON-compatible format.
+        """
+        attributes = attr.asdict(self)
+        attributes['tests'] = [test.to_json() for test in self.tests]
+        return attributes
+
+    @classmethod
+    def from_json(cls, jsonobj):
+        """
+        Takes in a JSON-compatible dictionary and returns a new TestSkeleton object.
+        """
+        try:
+            tests = jsonobj.pop('tests')
+            return cls(
+                descriptor=jsonobj['descriptor'],
+                tests=[AssignmentTest.from_json_dict(test) for test in tests],
+                disarm=jsonobj['disarm'],
+                file_path=jsonobj['file_path']
+            )
+        except KeyError as e:
+            raise ValueError('Incompatible dictionary constructor for TestSkeleton') from e
+
+
 @attr.s
 class User:
     user_id = attr.ib(type=int)
@@ -646,6 +682,28 @@ class User:
                               attempt=new_submission['attempt'])
                 return True
         return False
+
+    def to_json(self):
+        """
+        Cache the user as a JSON-compatible dictionary
+        """
+        attributes = attr.asdict(self)
+        attributes['log'] = self.log.getvalue()
+        return attributes
+
+    @classmethod
+    def from_json(cls, jsonobj):
+        """
+        Create a User object from a dictionary
+        """
+        try:
+            log = jsonobj.pop('log')
+            user = cls(**jsonobj)
+        except KeyError as e:
+            raise ValueError('Invalid dictionary for caching type "User"') from e
+        else:
+            user.log.write(log)
+            return user
 
 
 def parse_skeleton(skeleton_file: str) -> TestSkeleton:
@@ -855,8 +913,13 @@ def save_state(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: List[
         shutil.copytree(os.path.join(INSTALL_DIR, '.temp'), '.temp')
 
         with open('.cachefile', mode='w') as cache_file:
-            print(test_skeleton, file=cache_file)
-            print(users, file=cache_file)
+            json.dump(
+                {
+                    'skeleton': test_skeleton.to_json(),
+                    'users': [user.to_json() for user in users]
+                },
+                cache_file
+            )
 
         print_on_curline('State saved.    \n')
         CURRENTLY_SAVED = True
@@ -878,8 +941,9 @@ def load_state(course_id: int, assignment_id: int):
     os.chdir(os.path.join('.cache', str(course_id), str(assignment_id)))
     shutil.copytree('.temp', os.path.join(INSTALL_DIR, '.temp'))
     with open('.cachefile') as cache_file:
-        test_skeleton = eval(cache_file.readline())
-        users = eval(cache_file.readline())
+        cache = json.load(cache_file)
+        test_skeleton = TestSkeleton.from_json(cache['skeleton'])
+        users = [User.from_json(userdata) for userdata in cache['users']]
 
         os.chdir(INSTALL_DIR)
         return test_skeleton, users
