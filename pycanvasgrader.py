@@ -33,6 +33,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import time
 from importlib import util
 from datetime import datetime
 from numbers import Real
@@ -229,25 +230,35 @@ class PyCanvasGrader:
         response = self.session.put(url)
         return json.loads(response.text)
 
-    def grade_submissions(self, user_ids_and_grades: List[Tuple[int, int, str]]):
+    def grade_submissions(self, user_ids_and_grades: List[Tuple[int, int, str]]) -> bool:
         url = (f'https://sit.instructure.com/api/v1/courses/'
                f'{self.course_id}/assignments/{self.assignment_id}/submissions/update_grades')
 
         if DISARM_ALL or DISARM_GRADER:
             print('Grader disarmed; grades will not actually be submitted')
-            return
+            return True
 
         data = {}
         for user_id, grade, comment in user_ids_and_grades:
             grade = grade or 'NaN'
 
-            data[f'grade_data[{user_id}][posted_grade]'] = grade
+            data[f'grade_data[{user_id}][posted_grade]'] = str(grade)
 
             if comment != '':
                 data[f'grade_data[{user_id}][text_comment]'] = comment
 
         response = self.session.post(url, data=data)
-        return response
+
+        status = json.loads(response.text)
+        status_url = f'https://sit.instructure.com/api/v1/progress/{status["id"]}'
+        while status['workflow_state'] != 'completed':
+            if status['workflow_state'] == 'failed':
+                return False
+            time.sleep(0.25)
+            response = self.session.get(status_url)
+            status = json.loads(response.text)
+
+        return True
 
     def comment_on_submission(self, user_id: int, comment: str):
         global DISARM_ALL, DISARM_MESSAGER
@@ -915,7 +926,10 @@ def submit_all_grades(grader: PyCanvasGrader, users: list) -> bool:
             modified = True
             user.last_posted_grade = user.grade
     if len(user_data) > 0:
-        grader.grade_submissions(user_data)
+        success = grader.grade_submissions(user_data)
+        if not success:
+            print('Batch grading failed.')
+            print('Check your network connection and try again.')
     return modified
 
 
