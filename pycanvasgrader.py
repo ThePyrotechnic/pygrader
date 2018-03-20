@@ -36,7 +36,6 @@ import sys
 from importlib import util
 from datetime import datetime
 from numbers import Real
-from threading import Timer
 from typing import Callable, Dict, List, Sequence, Tuple, TypeVar
 
 # 3rd-party
