@@ -30,11 +30,13 @@ import os
 import pathlib
 import re
 import shutil
+import signal
 import subprocess
 import sys
 from importlib import util
 from datetime import datetime
 from numbers import Real
+from threading import Timer
 from typing import Callable, Dict, List, Sequence, Tuple, TypeVar
 
 # 3rd-party
@@ -374,7 +376,7 @@ class AssignmentTest:
     def run(self, user: 'User') -> dict:
         """
         Runs the Command
-        :return: A dictionary containing the command's return code, stdout, and stderr
+        :return: A dictionary containing the command's return code, stdout, timeout
         """
         command = self.command
         args = self.args
@@ -400,22 +402,27 @@ class AssignmentTest:
             if args is not None:
                 args = [arg.replace('%s', filename) for arg in args]
 
-        try:
-            if args:
-                command_to_send = [command] + args
-            else:
-                command_to_send = command
-            if sys.version_info[1] == 5:
-                proc = subprocess.run(command_to_send, input=self.input_str, stdout=subprocess.PIPE,
-                                      stderr=subprocess.STDOUT, timeout=self.timeout, shell=True)
+        command_to_send = [command] + args if args else command
 
-            else:
+        stdout = None
+        try:
+            if os.name == 'nt':
                 proc = subprocess.run(command_to_send, input=self.input_str, stdout=subprocess.PIPE,
-                                      stderr=subprocess.STDOUT, timeout=self.timeout, encoding='UTF-8', shell=True)
+                                      stderr=subprocess.STDOUT, timeout=self.timeout, shell=True, encoding='UTF-8')
+                stdout = proc.stdout
+            else:
+                proc = subprocess.Popen(command_to_send, stdout=subprocess.PIPE,
+                                        stderr=subprocess.STDOUT, shell=True, preexec_fn=os.setsid, encoding='UTF-8')
+                stdout, _ = proc.communicate(input=self.input_str, timeout=self.timeout)
 
         except subprocess.TimeoutExpired:
+            if os.name == 'nt':
+                proc.kill()
+            else:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
             return {'timeout': True}
-        return {'returncode': proc.returncode, 'stdout': proc.stdout, 'stderr': proc.stderr}
+
+        return {'returncode': proc.returncode, 'stdout': stdout, 'timeout': False}
 
     def run_and_match(self, user: 'User') -> bool:
         """
@@ -569,9 +576,9 @@ class TestSkeleton:
                     print('Enter the score for this test:')
                     total_score += choose_val(1000, allow_negative=True, allow_zero=True, allow_float=True)
                 if test.point_val > 0:
-                    print('--Adding %i points--' % test.point_val, user.log)
+                    print('--Adding %i points--' % test.point_val, file=user.log)
                 elif test.point_val == 0:
-                    print('--No points set for this test--', user.log)
+                    print('--No points set for this test--', file=user.log)
                 else:
                     print('--Subtracting %i points--' % abs(test.point_val), file=user.log)
                 total_score += test.point_val
@@ -686,7 +693,7 @@ def init_tempdir():
     try:
         os.chdir(INSTALL_DIR)
         if os.path.exists('.temp'):
-                shutil.rmtree('.temp')
+            shutil.rmtree('.temp')
         os.makedirs('.temp', exist_ok=True)
     except:
         print('An error occurred while initializing the "temp" directory.',
@@ -729,7 +736,7 @@ def save_prefs(prefs: dict, new_prefs: dict):
     except IOError:
         print('Unable to write preferences.toml')
 
-        
+
 def month_year(time_string: str) -> str:
     dt = datetime.strptime(time_string, '%Y-%m-%dT%H:%M:%SZ')
     return dt.strftime('%b %Y')
@@ -806,7 +813,6 @@ def list_choices(
         formatter: Callable[[T], str] = str,
         msg_below: bool = False,
         start_at: int = 1):
-
     if not msg_below and message is not None:
         print(message)
 
@@ -891,7 +897,7 @@ def grade_all_submissions(test_skeleton: TestSkeleton, users: List[User], only_u
         if len(users) == 0:
             print('No currently ungraded submissions to grade.')
             return False
-    
+
     total = len(users)
 
     for count, user in enumerate(users):
@@ -1111,7 +1117,7 @@ def main_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: list, 
                 print('Would you like to save them before quitting? (y or n)')
                 if choose_bool():
                     save_state(grader, test_skeleton, users)
-            
+
             close_program(grader)
 
 
