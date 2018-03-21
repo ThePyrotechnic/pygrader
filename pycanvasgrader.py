@@ -579,9 +579,9 @@ class TestSkeleton:
                     print('Enter the score for this test:')
                     total_score += choose_val(1000, allow_negative=True, allow_zero=True, allow_float=True)
                 if test.point_val > 0:
-                    print('--Adding %i points--' % test.point_val, user.log)
+                    print('--Adding %i points--' % test.point_val, file=user.log)
                 elif test.point_val == 0:
-                    print('--No points set for this test--', user.log)
+                    print('--No points set for this test--', file=user.log)
                 else:
                     print('--Subtracting %i points--' % abs(test.point_val), file=user.log)
                 total_score += test.point_val
