@@ -9,3 +9,5 @@ skeletons/*
 *.swp
 *.bak
 __pycache__/*
+test-files/*
+venv/*
