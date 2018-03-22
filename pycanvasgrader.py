@@ -1002,6 +1002,27 @@ def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 
+def handle_signal(_, frame):
+    print('Received interrupt signal.')
+    grader = None
+    users = None
+    test_skeleton = None
+
+    while frame and None in (grader, users, test_skeleton):
+        try:
+            grader = frame.f_locals['grader']
+            users = frame.f_locals['users']
+            test_skeleton = frame.f_locals['test_skeleton']
+        except KeyError:
+            grader, users, test_skeleton = None, None, None
+            frame = frame.f_back
+        else:
+            break
+
+    if grader and users and test_skeleton:
+        save_state(grader, test_skeleton, users)
+
+
 def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
     global CURRENTLY_SAVED
 
@@ -1312,9 +1333,11 @@ def grade_assignment(grader: PyCanvasGrader, prefs: dict):
 def main():
     global INSTALL_DIR, CURRENTLY_SAVED
 
-    if sys.version_info < (3, 5):
-        print('Python 3.5+ is required')
+    if sys.version_info < (3, 6):
+        print('Python 3.6+ is required')
         exit(1)
+
+    signal.signal(signal.SIGINT, handle_signal)
 
     clear_screen()
 
