@@ -481,12 +481,11 @@ class AssignmentTest:
 
         return self.negate_match
 
-
     def to_json(self):
         """
         Encode an AssignmentTest object as a JSON-compatible dictionary.
         """
-        attributes = attrs.asdict(self)
+        attributes = attr.asdict(self)
         if self.output_regex:
             attributes['output_regex'] = self.output_regex.pattern
         return attributes
@@ -595,7 +594,6 @@ class TestSkeleton:
             print('--Current score: %i--' % total_score, file=user.log)
 
         return total_score
-
 
     def to_json(self):
         """
