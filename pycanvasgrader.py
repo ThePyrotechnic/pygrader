@@ -240,7 +240,7 @@ class PyCanvasGrader:
 
         data = {}
         for user_id, grade, comment in user_ids_and_grades:
-            grade = grade or 'NaN'
+            grade = grade if grade is not None else 'NaN'
 
             data[f'grade_data[{user_id}][posted_grade]'] = str(grade)
 
@@ -575,14 +575,12 @@ class TestSkeleton:
         global DISARM_ALL, INSTALL_DIR
         DISARM_ALL = self.disarm
 
-        user_id = user.user_id
-
         total_score = 0
 
         try:
-            os.chdir(os.path.join(INSTALL_DIR, '.temp', str(user_id)))
+            os.chdir(os.path.join(INSTALL_DIR, '.temp', str(user.user_id)))
         except (WindowsError, OSError):
-            print('Could not access files for user "%i". Skipping' % user_id, file=user.log)
+            print('Could not access files for user "%i". Skipping' % user.user_id, file=user.log)
             return None
 
         for count, test in enumerate(self.tests, 1):
