@@ -11,9 +11,6 @@ REQUIRED File structure:
   access.token
   pycanvasgrader.py
 
-  TODO implement skeleton creation wizard
-  TODO test/implement visual grading
-
 Usage:
     pycanvasgrader [options]
 
@@ -58,7 +55,6 @@ NUM_REGEX = re.compile(r'-?\d+\.\d+|-?\d+')
 INSTALL_DIR = '.'
 CURRENTLY_SAVED = False
 
-# TODO determine whether or not should be capitalized
 Enrollment = Enum('Enrollment', ['teacher', 'student', 'ta', 'observer', 'designer'])
 T = TypeVar('T')
 
@@ -85,8 +81,6 @@ class PyCanvasGrader:
         """
         Responsible for retrieving the OAuth2 token for the session.
         :return: The OAuth2 token
-
-        TODO Talk about "proper" OAuth2 authentication
         """
         try:
             with open('access.token', 'r', encoding='UTF-8') as access_file:
@@ -414,7 +408,6 @@ class AssignmentTest:
 
         command_to_send = [command] + args if args else command
 
-        stdout = None
         try:
             if os.name == 'nt':
                 proc = subprocess.run(command_to_send, input=self.input_str, stdout=subprocess.PIPE,
@@ -571,7 +564,7 @@ class TestSkeleton:
         else:
             return False
 
-    def run_tests(self, user: 'User') -> Tuple[int, Dict]:
+    def run_tests(self, user: 'User') -> Real:
         global DISARM_ALL, INSTALL_DIR
         DISARM_ALL = self.disarm
 
@@ -681,8 +674,10 @@ class User:
         self.last_posted_grade = self.grade
 
     def update(self, grader: PyCanvasGrader) -> bool:
-
         new_submission = grader.submission(self.user_id)
+        return self.update_from_dict(grader, new_submission)
+
+    def update_from_dict(self, grader: PyCanvasGrader, new_submission: dict) -> bool:
         if new_submission['attempt'] > self.attempt:
             if grader.download_submission(new_submission):
                 # noinspection PyArgumentList
@@ -977,6 +972,37 @@ def grade_all_submissions(test_skeleton: TestSkeleton, users: List[User], only_u
     return True
 
 
+def update_all_submissions(grader: PyCanvasGrader, users: List[User]) -> bool:
+    """
+    Attempt to update all currently received submissions, and add any new ones
+    :param grader: The PyCanvasGrader object
+    :param users: The current list of users
+    :return: Whether at least one submission was updated or added
+    """
+    # TODO add progressbar when branch is merged
+    success = False
+    submissions = grader.submissions()
+    for submission in submissions:
+        invalid, found = False, False
+        for user in users:
+            try:
+                if user.submission_id == submission['user_id']:
+                    found = True
+                    success = user.update_from_dict(grader, submission)
+            except KeyError:
+                invalid = True
+                break
+        if not found and not invalid:
+            if grader.download_submission(submission):
+                user_data = grader.user(submission['user_id'])
+                users.append(User(submission['user_id'], submission['id'], user_data['name'], user_data.get('email'),
+                                  submission['score'], submission['grade_matches_current_submission'], submission['attempt']))
+                success = True
+
+    # return True if at least one user was updated
+    return success
+
+
 def submit_all_grades(grader: PyCanvasGrader, users: list) -> bool:
     modified = False
     user_data = []
@@ -1033,7 +1059,7 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
         'modify': 'Modify this user\'s grade',
         'comment': 'View or edit the comment for this grade',
         'clear-comment': 'Clear the current comment',
-        'update': 'Update this user\'s submission',
+        'update': 'Check this submission for updates',
         'clear': 'Clear this user\'s grade',
         'back': 'Return to the main menu'
     }
@@ -1136,6 +1162,7 @@ def main_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: list, 
         'grade_all': 'Grade all submissions',
         'grade_ungraded': 'Grade only ungraded submissions',
         'submit_all': 'Submit all grades',
+        'update': 'Check for submission updates',
         'reload_skeleton': 'Reload test skeleton',
         'save': 'Save changes',
         'save_and_quit': 'Save and quit',
@@ -1147,6 +1174,7 @@ def main_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: list, 
         options['grade_all'],
         options['grade_ungraded'],
         options['submit_all'],
+        options['update'],
         options['reload_skeleton'],
     ]
     if not CURRENTLY_SAVED:
@@ -1187,6 +1215,16 @@ def main_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: list, 
             modified = submit_all_grades(grader, users)
             if modified:
                 CURRENTLY_SAVED = False
+        elif selection == options['update']:
+            clear_screen()
+            success = update_all_submissions(grader, users)
+            if success and not prefs['session'].get('disable_autosave'):
+                save_state(grader, test_skeleton, users)
+            elif success:
+                CURRENTLY_SAVED = False
+            else:
+                print('No updates were found.')
+                print('If you think this is an error, check Canvas to make sure that the submission was actually updated/added')
         elif selection == options['reload_skeleton']:
             clear_screen()
             if not test_skeleton.reload():
