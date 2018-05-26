@@ -28,6 +28,7 @@ from io import StringIO
 import json
 import os
 import pathlib
+from pathlib import Path
 import re
 import shutil
 import signal
@@ -55,7 +56,7 @@ DISARM_GRADER = False
 RUN_WITH_TESTS = False
 ONLY_RUN_TESTS = False
 NUM_REGEX = re.compile(r'-?\d+\.\d+|-?\d+')
-INSTALL_DIR = '.'
+INSTALL_DIR = Path.cwd()
 CURRENTLY_SAVED = False
 
 # TODO determine whether or not should be capitalized
@@ -172,9 +173,9 @@ class PyCanvasGrader:
         # then move from .new to .temp/user_id.
         # This ensures that the download is complete before overwriting.
         try:
-            os.chdir(INSTALL_DIR)
-            os.makedirs(os.path.join('.temp', str(user_id), '.new'), exist_ok=True)
-            os.chdir(os.path.join('.temp', str(user_id), '.new'))
+            user_dir = INSTALL_DIR / '.temp' / str(user_id)
+            download_dir = user_dir / '.new'
+            download_dir.mkdir(exist_ok=True)
 
             for attachment in attachments:
                 try:
@@ -184,21 +185,20 @@ class PyCanvasGrader:
                     return False
 
                 r = self.session.get(url, stream=True)
-                with open(filename, 'wb') as f:
+                with open(download_dir / filename, 'wb') as f:
                     for chunk in r.iter_content(chunk_size=1024):
                         if chunk:
                             f.write(chunk)
 
-            os.chdir('..')
-            for cur_file in os.listdir('.'):
-                if os.path.isfile(cur_file):
-                    os.remove(cur_file)
+            for path in user_dir.iterdir():
+                if path.is_file():
+                    os.remove(path)
 
-            os.chdir('.new')
-            for cur_file in os.listdir('.'):
-                shutil.move(cur_file, '..')
-            os.chdir('..')
-            os.rmdir('.new')
+            for file in download_dir.iterdir():
+                shutil.move(file, user_dir)
+
+            os.rmdir(download_dir)
+
         except:
             print('Unable work with files in the installation directory')
             print('The program will likely not work as intended.')
@@ -292,13 +292,8 @@ class PyCanvasGrader:
         """
         Cache file to use for the current course/assignment combination
         """
-        file = os.path.join(
-            INSTALL_DIR,
-            '.cache',
-            str(self.course_id),
-            str(self.assignment_id)
-        )
-        return os.path.abspath(file)
+        file = INSTALL_DIR / '.cache' / str(self.course_id) / str(self.assignment_id)
+        return file.absolute()
 
 
 def option(default=False):
@@ -522,10 +517,10 @@ class TestSkeleton:
     @classmethod
     def from_file(cls, filename, skeleton_dir='skeletons') -> 'TestSkeleton':
         global INSTALL_DIR
-        os.chdir(INSTALL_DIR)
 
+        skeleton_file = INSTALL_DIR / skeleton_dir / filename
         try:
-            with open(os.path.join(skeleton_dir, filename)) as skeleton_file:
+            with open(skeleton_file, 'r') as skeleton_file:
                 try:
                     if filename.endswith('.json'):
                         data = json.load(skeleton_file)
@@ -552,7 +547,7 @@ class TestSkeleton:
                         if test is not None:
                             test_list.append(test)
 
-                    return TestSkeleton(descriptor, test_list, disarm, os.path.join(skeleton_dir, filename))
+                    return TestSkeleton(descriptor, test_list, disarm, skeleton_file)
         except (FileNotFoundError, IOError):
             return None
 
@@ -578,7 +573,7 @@ class TestSkeleton:
         total_score = 0
 
         try:
-            os.chdir(os.path.join(INSTALL_DIR, '.temp', str(user.user_id)))
+            os.chdir(INSTALL_DIR / '.temp' / str(user.user_id))
         except (WindowsError, OSError):
             print('Could not access files for user "%i". Skipping' % user.user_id, file=user.log)
             return None
@@ -755,10 +750,10 @@ def init_tempdir():
     global INSTALL_DIR
 
     try:
-        os.chdir(INSTALL_DIR)
-        if os.path.exists('.temp'):
-            shutil.rmtree('.temp')
-        os.makedirs('.temp', exist_ok=True)
+        tmpdir = INSTALL_DIR / '.temp'
+        if tmpdir.exists():
+            shutil.rmtree(tmpdir)
+        tmpdir.mkdir(exist_ok=True)
     except:
         print('An error occurred while initializing the "temp" directory.',
               'Please delete/create the directory manually and re-run the program')
@@ -915,16 +910,21 @@ def save_state(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: List[
     global INSTALL_DIR, CURRENTLY_SAVED
     print_on_curline('Saving state...')
     try:
-        os.chdir(INSTALL_DIR)
-        cache_dir = os.path.join('.cache', str(grader.course_id), str(grader.assignment_id))
-        os.makedirs(cache_dir, exist_ok=True)
-        os.chdir(cache_dir)
+        cache_dir = (
+            INSTALL_DIR / '.cache'
+            / str(grader.course_id)
+            / str(grader.assignment_id)
+        )
+        cache_dir.mkdir(exist_ok=True)
 
-        if os.path.exists('.temp'):
-            shutil.rmtree('.temp')
-        shutil.copytree(os.path.join(INSTALL_DIR, '.temp'), '.temp')
+        tmpdir = cache_dir / '.temp'
 
-        with open('.cachefile', mode='w') as cache_file:
+        if tmpdir.exists():
+            shutil.rmtree(tmpdir)
+
+        shutil.copytree(INSTALL_DIR / '.temp', tmpdir)
+
+        with open(cache_dir / '.cachefile', mode='w') as cache_file:
             json.dump(
                 {
                     'skeleton': test_skeleton.to_json(),
@@ -935,29 +935,28 @@ def save_state(grader: PyCanvasGrader, test_skeleton: TestSkeleton, users: List[
 
         print_on_curline('State saved.    \n')
         CURRENTLY_SAVED = True
-        os.chdir(INSTALL_DIR)
+
     except:
         print('There was an error while saving the state.')
-        print('Make sure the program has permission to read/write in {}'.format(os.path.join(INSTALL_DIR, '.cache')))
+        print(f'Make sure the program has permission to read/write in {INSTALL_DIR/".cache"}')
         print('and that the directory is not in use.')
-        os.chdir(INSTALL_DIR)
 
 
 def load_state(course_id: int, assignment_id: int):
     global INSTALL_DIR
 
-    os.chdir(INSTALL_DIR)
-    if os.path.exists('.temp'):
-        shutil.rmtree('.temp')
+    tmpdir = INSTALL_DIR / '.temp'
+    if tmpdir.exists():
+        shutil.rmtree(tmpdir)
 
-    os.chdir(os.path.join('.cache', str(course_id), str(assignment_id)))
-    shutil.copytree('.temp', os.path.join(INSTALL_DIR, '.temp'))
-    with open('.cachefile') as cache_file:
+    cache_dir = INSTALL_DIR / '.cache' / str(course_id) / str(assignment_id)
+    shutil.copytree(cache_dir / '.temp', tmpdir)
+
+    with open(cache_dir / '.cachefile', mode='r') as cache_file:
         cache = json.load(cache_file)
         test_skeleton = TestSkeleton.from_json(cache['skeleton'])
         users = [User.from_json(userdata) for userdata in cache['users']]
 
-        os.chdir(INSTALL_DIR)
         return test_skeleton, users
 
 
@@ -1339,7 +1338,7 @@ def main():
 
     clear_screen()
 
-    INSTALL_DIR = os.getcwd()
+    INSTALL_DIR = Path.cwd()
 
     init_tempdir()
     # Initialize grading session and fetch courses
