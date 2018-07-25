@@ -508,16 +508,15 @@ class AssignmentTest:
         return attributes
 
 
-@attr.s
+@attr.s(auto_attribs=True)
 class TestSkeleton:
     """
     An abstract skeleton to handle testing of a specific group of files
     """
-
-    descriptor = attr.ib(type=str)
-    tests = attr.ib(type=List[AssignmentTest])  # Tests to run in the order that they are added.
-    disarm = attr.ib(default=False, type=bool)  # Whether to actually submit grades/send messages
-    file_path = attr.ib(default='', type=str)
+    descriptor: str
+    tests: List[AssignmentTest]  # Tests to run in the order that they are added.
+    disarm: bool = False  # Whether to actually submit grades/send messages
+    file_path: str = ''
 
     @classmethod
     def from_file(cls, filename, skeleton_dir='skeletons') -> 'TestSkeleton':
