@@ -764,31 +764,25 @@ def init_tempdir():
         exit(1)
 
 
-def open_file(filename: str, mode: str = 'r'):
+def load_preferences() -> dict:
+    """
+    Load preferences for grader execution
+    """
+    preferences = {}
     try:
-        file = open(filename, mode=mode)
+        with open("preferences.toml", "r") as pref_file:
+            preferences = toml.load(pref_file)
     except (FileNotFoundError, IOError):
-        return None
+        pass
+    except toml.TomlDecodeError:
+        print("Preference file is invalid. Is it valid TOML?", file=sys.stderr)
     else:
-        return file
-
-
-def load_prefs() -> dict:
-    prefs_file = open_file('preferences.toml')
-    pref_vals = {}
-    if prefs_file is not None:
-        try:
-            pref_vals = toml.load(prefs_file)
-        except toml.TomlDecodeError:
-            print('Preferences file is invalid. Is it valid TOML?')
-
-    # To simplify logic in the main functions, prefs['known_category'] is always defined
-    prefs = {
-        'session': pref_vals.get('session', {}),
-        'quickstart': pref_vals.get('quickstart', {})
-    }
-
-    return prefs
+        # To simplify logic elsewhere, prefs[category] for expected categories
+        # should be defined
+        return {
+            "session": preferences.get("session", {}),
+            "quickstart": preferences.get("quickstart", {}),
+        }
 
 
 def save_prefs(prefs: dict, new_prefs: dict):
@@ -1344,7 +1338,7 @@ def main():
     # Initialize grading session and fetch courses
     grader = PyCanvasGrader()
 
-    prefs = load_prefs()
+    prefs = load_preferences()
     grader.course_id, grader.assignment_id = startup(grader, prefs)
 
     if not prefs['session'].get('ignore_cache') and os.path.exists(grader.cache_file):
