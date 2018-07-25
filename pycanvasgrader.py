@@ -776,13 +776,13 @@ def load_preferences() -> dict:
         pass
     except toml.TomlDecodeError:
         print("Preference file is invalid. Is it valid TOML?", file=sys.stderr)
-    else:
-        # To simplify logic elsewhere, prefs[category] for expected categories
-        # should be defined
-        return {
-            "session": preferences.get("session", {}),
-            "quickstart": preferences.get("quickstart", {}),
-        }
+    
+    # To simplify logic elsewhere, prefs[category] for expected categories
+    # should be defined
+    return {
+        "session": preferences.get("session", {}),
+        "quickstart": preferences.get("quickstart", {}),
+    }
 
 
 def save_prefs(prefs: dict, new_prefs: dict):
