@@ -23,8 +23,8 @@ the shell example below.
 ```bash
 git clone https://github.com/ThePyrotechnic/pygrader.git
 cd pygrader
-python3.6 -m venv .
-source bin/activate
+python3.6 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 chmod +x pycanvasgrader.py
 # In the following commands replace $EDITOR with your editor of choice.
