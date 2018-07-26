@@ -63,23 +63,21 @@ Enrollment = Enum('Enrollment', ['teacher', 'student', 'ta', 'observer', 'design
 T = TypeVar('T')
 
 
+@attr.s(cmp=False)
 class PyCanvasGrader:
     """
     A PyCanvasGrader object; responsible for communicating with the Canvas API
     """
+    course_id = attr.ib(-1, type=int)
+    assignment_id = attr.ib(-1, type=int)
 
-    def __init__(self, course_id: int = -1, assignment_id: int = -1):
+    token = attr.ib(init=False, repr=False, type=str)
+    session = attr.ib(attr.Factory(requests.Session), init=False)
+
+    def __attrs_post_init__(self):
         self.token = self.authenticate()
-
-        self.session = requests.Session()
         self.session.headers.update({'Authorization': 'Bearer ' + self.token})
-
-        self.course_id = course_id
-        self.assignment_id = assignment_id
-
-    def __repr__(self):
-        return f'PyCanvasGrader(course_id={self.course_id}, assignment_id={self.assignment_id})'
-
+    
     @staticmethod
     def authenticate() -> str:
         """
