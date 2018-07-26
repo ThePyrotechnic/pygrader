@@ -1,0 +1,15 @@
+[[source]]
+url = 'https://pypi.python.org/simple'
+verify_ssl = true
+name = 'pypi'
+
+[requires]
+python_version = '3.6'
+
+[packages]
+attrs='==17.4.0'
+requests='==2.18.4'
+toml='==0.9.4'
+
+[dev-packages]
+py={version='==1.5.2'}
