@@ -72,7 +72,7 @@ class PyCanvasGrader:
     assignment_id = attr.ib(-1, type=int)
 
     token = attr.ib(init=False, repr=False, type=str)
-    session = attr.ib(attr.Factory(requests.Session), init=False)
+    session = attr.ib(attr.Factory(requests.Session), init=False, repr=False)
 
     def __attrs_post_init__(self):
         self.token = self.authenticate()
