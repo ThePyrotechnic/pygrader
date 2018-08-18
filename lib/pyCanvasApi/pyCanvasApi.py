@@ -9,7 +9,7 @@ from typing import List, Tuple
 import requests
 import attr
 
-import lib.pyCanvasApi.utils as c_utils
+from lib.pyCanvasApi import utils
 
 
 @attr.s(cmp=False)
@@ -49,7 +49,7 @@ class PyCanvasGrader:
     def close(self):
         self.session.close()
 
-    def courses(self, enrollment_type: c_utils.Enrollment = None) -> list:
+    def courses(self, enrollment_type: utils.Enrollment = None) -> list:
         """
         :param enrollment_type: (Optional) teacher, student, ta, observer, designer
         :return: A list of the user's courses as dictionaries, optionally filtered by enrollment_type

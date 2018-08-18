@@ -10,7 +10,7 @@ from typing import List, Optional
 
 import attr
 
-import lib.pyCanvasApi.utils as c_utils
+from lib.pyCanvasApi import utils
 
 
 # noinspection PyDataclass,PyUnresolvedReferences
@@ -52,15 +52,15 @@ class AssignmentTest:
     fail_comment = attr.ib(None, type=str)
     point_val = attr.ib(0, type=float)
 
-    test_must_pass = c_utils.option(False)
-    print_file = c_utils.option()
-    single_file = c_utils.option()
-    ask_for_target = c_utils.option()
-    include_filetype = c_utils.option(True)
-    print_output = c_utils.option(True)
-    negate_match = c_utils.option()
-    exact_match = c_utils.option()
-    prompt_for_score = c_utils.option()
+    test_must_pass = utils.option(False)
+    print_file = utils.option()
+    single_file = utils.option()
+    ask_for_target = utils.option()
+    include_filetype = utils.option(True)
+    print_output = utils.option(True)
+    negate_match = utils.option()
+    exact_match = utils.option()
+    prompt_for_score = utils.option()
 
     # The name of the test case
     name = attr.ib(None, type=str)
@@ -159,14 +159,14 @@ class AssignmentTest:
 
         if self.numeric_match is not None:
             numeric_match = self.numeric_match.copy()
-            extracted_nums = map(float, re.findall(c_utils.NUM_REGEX, result['stdout']))
+            extracted_nums = map(float, re.findall(utils.NUM_REGEX, result['stdout']))
 
             for number in extracted_nums:
                 for num in numeric_match:
                     if isinstance(num, str):
                         numeric_match.remove(num)
                         try:
-                            center, diff = (float(x) for x in re.findall(c_utils.NUM_REGEX, num))
+                            center, diff = (float(x) for x in re.findall(utils.NUM_REGEX, num))
                         except:
                             continue
                         num = [center - diff, center + diff]
@@ -329,7 +329,7 @@ class TestSkeleton:
             if test.run_and_match(user):
                 if test.prompt_for_score:
                     print('Enter the score for this test:')
-                    total_score += c_utils.choose_val(1000, allow_negative=True, allow_zero=True, allow_float=True)
+                    total_score += utils.choose_val(1000, allow_negative=True, allow_zero=True, allow_float=True)
                 if test.point_val > 0:
                     print('--Adding %i points--' % test.point_val, file=user.log)
                 elif test.point_val == 0:
