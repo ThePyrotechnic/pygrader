@@ -306,6 +306,7 @@ def option(default=False):
     return attr.ib(default=default, type=bool)
 
 
+# noinspection PyDataclass
 @attr.s
 class AssignmentTest:
     """
