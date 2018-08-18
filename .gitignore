@@ -11,3 +11,4 @@ skeletons/*
 __pycache__/*
 test-files/*
 venv/*
+Pipfile.lock
