@@ -6,15 +6,16 @@ import signal
 import json
 import toml
 from numbers import Real
-from typing import List, Optional
+from typing import List, Optional, Pattern
 
 import attr
 
-from lib.pyCanvasApi import utils
+from lib.canvas_api import User
+from lib.canvas_api import utils
 
 
 # noinspection PyDataclass,PyUnresolvedReferences
-@attr.s
+@attr.s(auto_attribs=True)
 class AssignmentTest:
     """
     An abstract test to be run on an assignment submission
@@ -40,38 +41,42 @@ class AssignmentTest:
     :param negate_match: Whether to negate the result of checking output_match and output_regex
     :param exact_match: Whether the naive string match (output_match) should be an exact check or a substring check
     """
-    command = attr.ib(type=str)
-    args = attr.ib(None, type=list)
-    input_str = attr.ib(None, type=str)
-    target_file = attr.ib(None, type=str)
-    output_match = attr.ib(None, type=str)
-    output_regex = attr.ib(None, converter=(
-        lambda expr: re.compile(re.escape(expr)) if expr is not None else None))
-    numeric_match = attr.ib(None, type=list)
-    timeout = attr.ib(None, type=int)
-    fail_comment = attr.ib(None, type=str)
-    point_val = attr.ib(0, type=float)
 
-    test_must_pass = utils.option(False)
-    print_file = utils.option()
-    single_file = utils.option()
-    ask_for_target = utils.option()
-    include_filetype = utils.option(True)
-    print_output = utils.option(True)
-    negate_match = utils.option()
-    exact_match = utils.option()
-    prompt_for_score = utils.option()
+    command: str
+    args: List[str] = attr.Factory(list)
+    input_str: Optional[str] = None
+    target_file: Optional[str] = None
+    output_match: Optional[str] = None
+    output_regex: Optional[Pattern] = None
+    numeric_match: Optional[List] = None
+    timeout: Optional[int] = None
+    fail_comment: Optional[str] = None
+    point_val: float = 0.0
+
+    test_must_pass: bool = False
+    print_file: bool = False
+    single_file: bool = False
+    ask_for_target: bool = False
+    include_filetype: bool = True
+    print_output: bool = True
+    negate_match: bool = False
+    exact_match: bool = False
+    prompt_for_score: bool = False
 
     # The name of the test case
-    name = attr.ib(None, type=str)
+    name: Optional[str] = None
+
+    def __attrs_post_init__(self):
+        if self.output_regex is not None:
+            self.output_regex = re.compile(re.escape(self.output_regex))
 
     @classmethod
     def from_json_dict(cls, json_dict: dict):
-        if 'command' not in json_dict:
+        if "command" not in json_dict:
             return None
 
-        json_dict['input_str'] = json_dict.pop('input', None)
-        json_dict['fail_comment'] = json_dict.pop('fail_comment', None)
+        json_dict["input_str"] = json_dict.pop("input", None)
+        json_dict["fail_comment"] = json_dict.pop("fail_comment", None)
 
         return AssignmentTest(**json_dict)
 
@@ -81,15 +86,14 @@ class AssignmentTest:
         files = [file for file in path.iterdir() if file.is_file()]
 
         if not files:
-            print('This directory is empty, unable to choose a file for the "%s" command' % command)
+            print(
+                f'This directory is empty, unable to choose a file for the "{command}" command'
+            )
             return None
 
-        return choose(
-            files,
-            'Select a file for the "%s" command:' % command
-        ).name
+        return utils.choose(files, 'Select a file for the "%s" command:' % command).name
 
-    def run(self, user: 'User') -> dict:
+    def run(self, user: User) -> dict:
         """
         Runs the Command
         :return: A dictionary containing the command's return code, stdout, timeout
@@ -97,12 +101,11 @@ class AssignmentTest:
         command = self.command
         args = self.args
         filename = self.target_file
+        files = os.listdir(os.getcwd())
 
         if filename is None:
-            if self.single_file and len(os.listdir(os.getcwd())) > 0:
-                filename = os.listdir(os.getcwd())[0]
-            elif len(os.listdir(os.getcwd())) == 1:
-                filename = os.listdir(os.getcwd())[0]
+            if (self.single_file and files) or len(files) == 1:
+                filename = files[0]
             elif self.ask_for_target:
                 filename = AssignmentTest.target_prompt(self.command)
 
@@ -110,63 +113,78 @@ class AssignmentTest:
             filename = os.path.splitext(filename)[0]
         if filename is not None:
             if self.print_file:
-                print('--FILE--', file=user.log)
-                with open(filename, 'r') as f:
+                print("--FILE--", file=user.log)
+                with open(filename, "r") as f:
                     print(f.read(), file=user.log)
-                print('--END FILE--', file=user.log)
-            command = self.command.replace('%s', filename)
-            if args is not None:
-                args = [arg.replace('%s', filename) for arg in args]
+                print("--END FILE--", file=user.log)
+            command = self.command.replace("%s", filename)
+            args = [arg.replace("%s", filename) for arg in args]
 
         command_to_send = [command] + args if args else command
 
         try:
-            if os.name == 'nt':
-                proc = subprocess.run(command_to_send, input=self.input_str, stdout=subprocess.PIPE,
-                                      stderr=subprocess.STDOUT, timeout=self.timeout, shell=True, encoding='UTF-8')
+            if os.name == "nt":
+                proc = subprocess.run(
+                    command_to_send,
+                    input=self.input_str,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    timeout=self.timeout,
+                    shell=True,
+                    encoding="UTF-8",
+                )
                 stdout = proc.stdout
             else:
-                proc = subprocess.Popen(command_to_send, stdout=subprocess.PIPE,
-                                        stderr=subprocess.STDOUT, shell=True, preexec_fn=os.setsid, encoding='UTF-8')
+                proc = subprocess.Popen(
+                    command_to_send,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    shell=True,
+                    preexec_fn=os.setsid,
+                    encoding="UTF-8",
+                )
                 stdout, _ = proc.communicate(input=self.input_str, timeout=self.timeout)
 
         except subprocess.TimeoutExpired:
-            if os.name == 'nt':
+            if os.name == "nt":
                 proc.kill()
             else:
                 os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            return {'timeout': True}
+            return {"timeout": True}
 
-        return {'returncode': proc.returncode, 'stdout': stdout, 'timeout': False}
+        return {"returncode": proc.returncode, "stdout": stdout, "timeout": False}
 
-    def run_and_match(self, user: 'User') -> bool:
+    def run_and_match(self, user: User) -> bool:
         """
-        Runs the command and matches the output to the output_match/regex. If neither are defined then this always returns true
+        Runs the command and matches the output to the output_match/regex. If
+        neither are defined then this always returns true
+
         :return: Whether the output matched or not
         """
-
         result = self.run(user)
 
-        if result.get('timeout'):
+        if result.get("timeout"):
             return False
 
         if self.print_output:
-            print('\t--OUTPUT--', file=user.log)
-            print(result['stdout'], file=user.log)
-            print('\n\t--END OUTPUT--', file=user.log)
+            print("\t--OUTPUT--", file=user.log)
+            print(result["stdout"], file=user.log)
+            print("\n\t--END OUTPUT--", file=user.log)
         if not any((self.output_match, self.output_regex, self.numeric_match)):
             return True
 
         if self.numeric_match is not None:
             numeric_match = self.numeric_match.copy()
-            extracted_nums = map(float, re.findall(utils.NUM_REGEX, result['stdout']))
+            extracted_nums = map(float, re.findall(utils.NUM_REGEX, result["stdout"]))
 
             for number in extracted_nums:
                 for num in numeric_match:
                     if isinstance(num, str):
                         numeric_match.remove(num)
                         try:
-                            center, diff = (float(x) for x in re.findall(utils.NUM_REGEX, num))
+                            center, diff = (
+                                float(x) for x in re.findall(utils.NUM_REGEX, num)
+                            )
                         except:
                             continue
                         num = [center - diff, center + diff]
@@ -182,20 +200,20 @@ class AssignmentTest:
             return len(numeric_match) == 0
 
         if self.output_regex:
-            if self.output_regex.match(result['stdout']):
-                print('--Matched regular expression--', file=user.log)
+            if self.output_regex.match(result["stdout"]):
+                print("--Matched regular expression--", file=user.log)
                 if self.negate_match:
                     return False
                 return True
 
         if self.output_match:
             if self.exact_match:
-                condition = self.output_match == result['stdout']
+                condition = self.output_match == result["stdout"]
             else:
-                condition = self.output_match in result['stdout']
+                condition = self.output_match in result["stdout"]
 
             if condition:
-                print('--Matched string comparison--', file=user.log)
+                print("--Matched string comparison--", file=user.log)
                 if self.negate_match:
                     return False
                 return True
@@ -208,7 +226,7 @@ class AssignmentTest:
         """
         attributes = attr.asdict(self)
         if self.output_regex:
-            attributes['output_regex'] = self.output_regex.pattern
+            attributes["output_regex"] = self.output_regex.pattern
         return attributes
 
 
@@ -217,13 +235,14 @@ class TestSkeleton:
     """
     An abstract skeleton to handle testing of a specific group of files
     """
+
     descriptor: str
     tests: List[AssignmentTest]  # Tests to run in the order that they are added.
     disarm: bool = False  # Whether to actually submit grades/send messages
-    file_path: str = ''
+    file_path: str = ""
 
     @classmethod
-    def parse_skeleton(cls, filepath) -> 'TestSkeleton':
+    def parse_skeleton(cls, filepath) -> "TestSkeleton":
         """
         Parse a single TestSkeleton
         :return: The parsed skeleton, or None if parsing failed
@@ -248,31 +267,35 @@ class TestSkeleton:
         return skeleton_list
 
     @classmethod
-    def from_file(cls, file_path) -> Optional['TestSkeleton']:
+    def from_file(cls, file_path) -> Optional["TestSkeleton"]:
         try:
             with open(file_path) as skeleton_file:
                 try:
-                    if file_path.endswith('.json'):
+                    if file_path.endswith(".json"):
                         data = json.load(skeleton_file)
-                    elif file_path.endswith('.toml'):
+                    elif file_path.endswith(".toml"):
                         data = toml.load(skeleton_file)
                     else:
                         return None
                 except (json.JSONDecodeError, toml.TomlDecodeError) as e:
-                    print('There is an error in the', file_path, 'skeleton file. This skeleton will not be available')
-                    print('Error:', e)
+                    print(
+                        "There is an error in the",
+                        file_path,
+                        "skeleton file. This skeleton will not be available",
+                    )
+                    print("Error:", e)
                     return None
                 try:
-                    descriptor = data['descriptor']
-                    tests = data['tests']
+                    descriptor = data["descriptor"]
+                    tests = data["tests"]
                 except KeyError:
                     return None
                 else:
-                    disarm = data.get('disarm', False)
-                    defaults = data.get('default', {})
+                    disarm = data.get("disarm", False)
+                    defaults = data.get("default", {})
                     test_list = []
                     for name, json_dict in tests.items():
-                        args = {**defaults, **json_dict, 'name': name}
+                        args = {**defaults, **json_dict, "name": name}
                         test = AssignmentTest.from_json_dict(args)
                         if test is not None:
                             test_list.append(test)
@@ -287,15 +310,17 @@ class TestSkeleton:
         Takes in a JSON-compatible dictionary and returns a new TestSkeleton object.
         """
         try:
-            tests = jsonobj.pop('tests')
+            tests = jsonobj.pop("tests")
             return cls(
-                descriptor=jsonobj['descriptor'],
+                descriptor=jsonobj["descriptor"],
                 tests=[AssignmentTest.from_json_dict(test) for test in tests],
-                disarm=jsonobj['disarm'],
-                file_path=jsonobj['file_path']
+                disarm=jsonobj["disarm"],
+                file_path=jsonobj["file_path"],
             )
         except KeyError as e:
-            raise ValueError('Incompatible dictionary constructor for TestSkeleton') from e
+            raise ValueError(
+                "Incompatible dictionary constructor for TestSkeleton"
+            ) from e
 
     def reload(self) -> bool:
         """
@@ -312,39 +337,48 @@ class TestSkeleton:
         else:
             return False
 
-    def run_tests(self, user: 'User') -> Optional[Real]:
+    def run_tests(self, user: User) -> Optional[Real]:
         total_score = 0
 
         try:
-            os.chdir(os.path.join(os.environ['INSTALL_DIR'], '.temp', str(user.user_id)))
+            os.chdir(
+                os.path.join(os.environ["INSTALL_DIR"], ".temp", str(user.user_id))
+            )
         except (WindowsError, OSError):
-            print('Could not access files for user "%i". Skipping' % user.user_id, file=user.log)
+            print(
+                'Could not access files for user "%i". Skipping' % user.user_id,
+                file=user.log,
+            )
             return None
 
         for count, test in enumerate(self.tests, 1):
-            print('\n--Running test %i--' % count, file=user.log)
+            print("\n--Running test %i--" % count, file=user.log)
 
             if test.prompt_for_score:
-                print('\nUser:', user.name)
+                print("\nUser:", user.name)
             if test.run_and_match(user):
                 if test.prompt_for_score:
-                    print('Enter the score for this test:')
-                    total_score += utils.choose_val(1000, allow_negative=True, allow_zero=True, allow_float=True)
+                    print("Enter the score for this test:")
+                    total_score += utils.choose_val(
+                        1000, allow_negative=True, allow_zero=True, allow_float=True
+                    )
                 if test.point_val > 0:
-                    print('--Adding %i points--' % test.point_val, file=user.log)
+                    print("--Adding %i points--" % test.point_val, file=user.log)
                 elif test.point_val == 0:
-                    print('--No points set for this test--', file=user.log)
+                    print("--No points set for this test--", file=user.log)
                 else:
-                    print('--Subtracting %i points--' % abs(test.point_val), file=user.log)
+                    print(
+                        "--Subtracting %i points--" % abs(test.point_val), file=user.log
+                    )
                 total_score += test.point_val
             else:
-                print('--Test failed--', file=user.log)
+                print("--Test failed--", file=user.log)
                 if test.fail_comment:
-                    user.comment += test.fail_comment + '\n'
+                    user.comment += test.fail_comment + "\n"
                 if test.test_must_pass:
                     break
 
-            print('--Current score: %i--' % total_score, file=user.log)
+            print("--Current score: %i--" % total_score, file=user.log)
 
         return total_score
 
@@ -354,5 +388,5 @@ class TestSkeleton:
         JSON-compatible format.
         """
         attributes = attr.asdict(self)
-        attributes['tests'] = [test.to_json() for test in self.tests]
+        attributes["tests"] = [test.to_json() for test in self.tests]
         return attributes
