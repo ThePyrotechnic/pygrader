@@ -4,7 +4,7 @@ import time
 import shutil
 from io import StringIO
 from numbers import Real
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import requests
 import attr
@@ -242,20 +242,20 @@ class PyCanvasGrader:
         return os.path.abspath(file)
 
 
-@attr.s
+@attr.s(auto_attribs=True)
 class User:
-    user_id = attr.ib(type=int)
-    submission_id = attr.ib(type=int)
-    name = attr.ib(type=str)
-    email = attr.ib(type=str)
-    last_posted_grade = attr.ib(type=Real)
-    grade_matches_submission = attr.ib(type=bool)
-    attempt = attr.ib(type=int)
-    grade = attr.ib(type=Real, default=None)
-    comment = attr.ib(type=str, default="")
+    user_id: int
+    submission_id: int
+    name: str
+    email: str
+    last_posted_grade: Real
+    grade_matches_submission: bool
+    attempt: int
+    grade: Optional[Real] = None
+    comment: str = ""
     # Used like a StringBuilder in Java to more efficiently build large strings.
     # But also fulfills the file protocol in Python so is writable like a file.
-    log = attr.ib(default=attr.Factory(StringIO), init=False, type=StringIO)
+    log: StringIO = attr.ib(default=attr.Factory(StringIO), init=False, repr=False)
 
     def __attrs_post_init__(self):
         if self.grade is None:
@@ -327,10 +327,3 @@ class User:
         else:
             user.log.write(log)
             return user
-
-
-def option(default=False):
-    """
-    Constructor for optional boolean configuartion attributes
-    """
-    return attr.ib(default=default, type=bool)
