@@ -82,7 +82,7 @@ class AssignmentTest:
 
     @classmethod
     def target_prompt(cls, command: str):
-        path = pathlib.Path(os.getcwd())
+        path = pathlib.Path.cwd()
         files = [file for file in path.iterdir() if file.is_file()]
 
         if not files:

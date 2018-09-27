@@ -120,7 +120,7 @@ class PyCanvasGrader:
         try:
             user_id = submission["user_id"]
             attachments = submission["attachments"]
-        except ValueError:
+        except (KeyError, TypeError):
             return False
 
         # First download everything to .new,
@@ -136,7 +136,7 @@ class PyCanvasGrader:
                 try:
                     url = attachment["url"]
                     filename = attachment["filename"]
-                except ValueError:
+                except (KeyError, TypeError):
                     return False
 
                 r = self.session.get(url, stream=True)
