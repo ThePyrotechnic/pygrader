@@ -12,6 +12,9 @@ import attr
 from lib.canvas_api import utils
 
 
+CANVAS_API_URL = "https://sit.instructure.com/api/v1"
+
+
 @attr.s(cmp=False)
 class PyCanvasGrader:
     """
@@ -57,39 +60,39 @@ class PyCanvasGrader:
         :param enrollment_type: (Optional) teacher, student, ta, observer, designer
         :return: A list of the user's courses as dictionaries, optionally filtered by enrollment_type
         """
-        url = "https://sit.instructure.com/api/v1/courses?per_page=100"
+        url = f"{CANVAS_API_URL}/courses?per_page=100"
         if enrollment_type is not None:
             url += "&enrollment_type=" + enrollment_type.name.lower()
 
         response = self.session.get(url)
-        return json.loads(response.text)
+        return response.json()
 
     def assignments(self, ungraded: bool = True) -> list:
         """
         :param ungraded: Whether to filter assignments by only those that have ungraded work. Default: True
         :return: A list of the course's assignments
         """
-        url = f"https://sit.instructure.com/api/v1/courses/{self.course_id}/assignments?per_page=100"
+        url = f"{CANVAS_API_URL}/courses/{self.course_id}/assignments?per_page=100"
         if ungraded:
             url += "&bucket=ungraded"
 
         response = self.session.get(url)
-        return json.loads(response.text)
+        return response.json()
 
     def submissions(self) -> list:
         """
         :return: A list of the assignment's submissions
         """
         url = (
-            f"https://sit.instructure.com/api/v1/courses/{self.course_id}"
+            f"{CANVAS_API_URL}/courses/{self.course_id}"
             f"/assignments/{self.assignment_id}/submissions?per_page=100"
         )
 
         response = self.session.get(url)
-        final_response = json.loads(response.text)
+        final_response = response.json()
         while response.links.get("next"):
             response = self.session.get(response.links["next"]["url"])
-            final_response.extend(json.loads(response.text))
+            final_response.extend(response.json())
 
         return final_response
 
@@ -100,12 +103,12 @@ class PyCanvasGrader:
         :return: A dictionary which represents the submission object
         """
         url = (
-            f"https://sit.instructure.com/api/v1/courses/"
+            f"{CANVAS_API_URL}/courses/"
             f"{self.course_id}/assignments/{self.assignment_id}/submissions/{user_id}"
         )
 
         response = self.session.get(url)
-        return json.loads(response.text)
+        return response.json()
 
     def download_submission(self, submission: dict) -> bool:
         """
@@ -166,27 +169,27 @@ class PyCanvasGrader:
         :param user_id: The ID of the user
         :return: A dictionary with the user's information
         """
-        url = f"https://sit.instructure.com/api/v1/courses/{self.course_id}/users/{user_id}"
+        url = f"{CANVAS_API_URL}/courses/{self.course_id}/users/{user_id}"
 
         response = self.session.get(url)
-        return json.loads(response.text)
+        return response.json()
 
     def grade_submission(self, user_id: int, grade: Real):
         if grade is None:
             grade = "NaN"
         url = (
-            f"https://sit.instructure.com/api/v1/courses/{self.course_id}/assignments/{self.assignment_id}"
+            f"{CANVAS_API_URL}/courses/{self.course_id}/assignments/{self.assignment_id}"
             f"submissions/{user_id}/?submission[posted_grade]={grade}"
         )
 
         response = self.session.put(url)
-        return json.loads(response.text)
+        return response.json()
 
     def grade_submissions(
         self, user_ids_and_grades: List[Tuple[int, int, str]]
     ) -> bool:
         url = (
-            f"https://sit.instructure.com/api/v1/courses/"
+            f"{CANVAS_API_URL}/courses/"
             f"{self.course_id}/assignments/{self.assignment_id}/submissions/update_grades"
         )
 
@@ -201,32 +204,32 @@ class PyCanvasGrader:
 
         response = self.session.post(url, data=data)
 
-        status = json.loads(response.text)
-        status_url = f'https://sit.instructure.com/api/v1/progress/{status["id"]}'
+        status = response.json()
+        status_url = f'{CANVAS_API_URL}/progress/{status["id"]}'
         while status["workflow_state"] != "completed":
             if status["workflow_state"] == "failed":
                 return False
             time.sleep(0.25)
             response = self.session.get(status_url)
-            status = json.loads(response.text)
+            status = response.json()
 
         return True
 
     def comment_on_submission(self, user_id: int, comment: str):
         url = (
-            f"https://sit.instructure.com/api/v1/courses/{self.course_id}/assignments/{self.assignment_id}"
+            f"{CANVAS_API_URL}/courses/{self.course_id}/assignments/{self.assignment_id}"
             f"/submissions/{user_id}/?comment[text_comment]={comment}"
         )
 
         response = self.session.put(url)
-        return json.loads(response.text)
+        return response.json()
 
     def message_user(self, recipient_id: int, body: str, subject: str = None):
-        url = "https://sit.instructure.com/api/v1/conversations/"
+        url = f"{CANVAS_API_URL}/conversations/"
 
         data = {"recipients[]": recipient_id, "body": body, "subject": subject}
         response = self.session.post(url, data=data)
-        return json.loads(response.text)
+        return response.json()
 
     @property
     def cache_file(self):
