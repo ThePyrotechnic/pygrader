@@ -6,8 +6,6 @@ from enum import Enum, auto
 from datetime import datetime
 from typing import Sequence, Callable, TypeVar
 
-import attr
-
 
 class Enrollment(Enum):
     """
@@ -28,13 +26,6 @@ class Enrollment(Enum):
 NUM_REGEX = re.compile(r"-?\d+\.\d+|-?\d+")
 
 T = TypeVar("T")
-
-
-def option(default=False):
-    """
-    Constructor for optional boolean configuartion attributes
-    """
-    return attr.ib(default=default, type=bool)
 
 
 def choose_val(
