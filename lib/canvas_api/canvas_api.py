@@ -1,7 +1,7 @@
-import json
 import os
 import time
 import shutil
+from enum import Enum, auto
 from io import StringIO
 from numbers import Real
 from typing import List, Optional, Tuple
@@ -9,30 +9,48 @@ from typing import List, Optional, Tuple
 import requests
 import attr
 
-from lib.canvas_api import utils
+from .testing import TestSkeleton
 
 
 CANVAS_API_URL = "https://sit.instructure.com/api/v1"
 
 
-@attr.s(cmp=False)
+class Enrollment(Enum):
+    """
+    Each enrollment type possible in the Canvas API.
+    """
+
+    teacher = auto()
+    student = auto()
+    ta = auto()
+    observer = auto()
+    designer = auto()
+
+    # override the __str__ to omit "Enrollment."
+    def __str__(self):
+        return self.name
+
+
+@attr.s(cmp=False, auto_attribs=True)
 class PyCanvasGrader:
     """
     A PyCanvasGrader object; responsible for communicating with the Canvas API
     """
 
-    course_id = attr.ib(-1, type=int)
-    assignment_id = attr.ib(-1, type=int)
+    course_id: int = -1
+    assignment_id: int = -1
 
-    token = attr.ib(init=False, repr=False, type=str)
-    session = attr.ib(attr.Factory(requests.Session), init=False, repr=False)
+    token: str = attr.ib(init=False, repr=False)
+    session: requests.Session = attr.ib(
+        attr.Factory(requests.Session), init=False, repr=False
+    )
 
     def __attrs_post_init__(self):
         self.token = self.authenticate()
         self.session.headers.update({"Authorization": "Bearer " + self.token})
 
     @staticmethod
-    def authenticate() -> str:
+    def authenticate() -> str:  # type: ignore
         """
         Responsible for retrieving the OAuth2 token for the session.
         :return: The OAuth2 token
@@ -55,7 +73,7 @@ class PyCanvasGrader:
     def close(self):
         self.session.close()
 
-    def courses(self, enrollment_type: utils.Enrollment = None) -> list:
+    def courses(self, enrollment_type: Enrollment = None) -> list:
         """
         :param enrollment_type: (Optional) teacher, student, ta, observer, designer
         :return: A list of the user's courses as dictionaries, optionally filtered by enrollment_type
@@ -295,17 +313,12 @@ class User:
         if new_submission["attempt"] > self.attempt:
             if grader.download_submission(new_submission):
                 # noinspection PyArgumentList
-                self.__init__(
-                    user_id=self.user_id,
-                    submission_id=new_submission["id"],
-                    name=self.name,
-                    email=self.email,
-                    last_posted_grade=new_submission["score"],
-                    grade_matches_submission=new_submission[
-                        "grade_matches_current_submission"
-                    ],
-                    attempt=new_submission["attempt"],
-                )
+                self.submission_id = new_submission["id"]
+                self.last_posted_grade = new_submission["score"]
+                self.grade_matches_submission = new_submission[
+                    "grade_matches_current_submission"
+                ]
+                self.attempt = new_submission["attempt"]
                 return True
         return False
 

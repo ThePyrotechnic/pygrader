@@ -4,14 +4,16 @@ import pathlib
 import subprocess
 import signal
 import json
-import toml
 from numbers import Real
 from typing import List, Optional, Pattern
 
 import attr
+import toml
 
-from lib.canvas_api import User
+# from lib.canvas_api import User
 from lib.canvas_api import utils
+
+from lib.core.choices import choose, choose_float
 
 
 # noinspection PyDataclass,PyUnresolvedReferences
@@ -91,9 +93,10 @@ class AssignmentTest:
             )
             return None
 
-        return utils.choose(files, 'Select a file for the "%s" command:' % command).name
+        choice = choose(files, 'Select a file for the "%s" command:' % command)
+        return choice.name
 
-    def run(self, user: User) -> dict:
+    def run(self, user: "User") -> dict:
         """
         Runs the Command
         :return: A dictionary containing the command's return code, stdout, timeout
@@ -154,7 +157,7 @@ class AssignmentTest:
 
         return {"returncode": proc.returncode, "stdout": stdout, "timeout": False}
 
-    def run_and_match(self, user: User) -> bool:
+    def run_and_match(self, user: "User") -> bool:
         """
         Runs the command and matches the output to the output_match/regex. If
         neither are defined then this always returns true
@@ -328,17 +331,18 @@ class TestSkeleton:
         :return: True if the reload succeeded, false otherwise
         """
         new_skeleton = TestSkeleton.from_file(self.file_path)
-        if new_skeleton is not None:
-            self.descriptor = new_skeleton.descriptor
-            self.tests = new_skeleton.tests
-            self.disarm = new_skeleton.disarm
-            self.file_path = new_skeleton.file_path
-            return True
-        else:
+
+        if new_skeleton is None:
             return False
 
-    def run_tests(self, user: User) -> Optional[Real]:
-        total_score = 0
+        self.descriptor = new_skeleton.descriptor
+        self.tests = new_skeleton.tests
+        self.disarm = new_skeleton.disarm
+        self.file_path = new_skeleton.file_path
+        return True
+
+    def run_tests(self, user: "User") -> Optional[Real]:
+        total_score = 0.0
 
         try:
             os.chdir(
@@ -359,8 +363,8 @@ class TestSkeleton:
             if test.run_and_match(user):
                 if test.prompt_for_score:
                     print("Enter the score for this test:")
-                    total_score += utils.choose_val(
-                        1000, allow_negative=True, allow_zero=True, allow_float=True
+                    total_score += choose_float(
+                        1000, allow_negative=True, allow_zero=True
                     )
                 if test.point_val > 0:
                     print("--Adding %i points--" % test.point_val, file=user.log)

@@ -1,2 +1,2 @@
-from .canvas_api import PyCanvasGrader, User
+from .canvas_api import Enrollment, PyCanvasGrader, User
 from .testing import TestSkeleton

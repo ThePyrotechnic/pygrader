@@ -36,10 +36,10 @@ from typing import List
 import toml
 
 # library
-from lib.canvas_api import PyCanvasGrader, User, TestSkeleton
+from lib.canvas_api import Enrollment, PyCanvasGrader, User, TestSkeleton
 from lib.canvas_api import utils
 
-from lib.core import preferences
+from lib.core import choices, preferences
 
 if util.find_spec("py"):
     import py
@@ -107,7 +107,7 @@ def save_prefs(prefs: dict, new_prefs: dict):
 
 
 def choose_course(course_list) -> int:
-    return utils.choose(
+    return choices.choose(
         course_list,
         "Choose a course from the following list:",
         formatter=lambda c: "%s (%s)"
@@ -116,7 +116,7 @@ def choose_course(course_list) -> int:
 
 
 def choose_assignment(assignment_list) -> int:
-    return utils.choose(
+    return choices.choose(
         assignment_list,
         "Choose an assignment to grade:",
         formatter=lambda assignment: assignment.get("name"),
@@ -269,12 +269,12 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
 
         print("User Menu |", user)
         if not user.submitted:
-            last_grade = (
-                "ungraded" if user.last_posted_grade is None else user.last_posted_grade
-            )
-            print("Latest posted grade:", last_grade)
+            if user.last_posted_grade is None:
+                print("Last posted grade: ungraded")
+            else:
+                print("Last posted grade:", user.last_posted_grade)
         print("-")
-        choice = utils.choose(options)
+        choice = choices.choose(options)
 
         if choice == possible_opts["log"]:
             utils.clear_screen()
@@ -297,8 +297,8 @@ def user_menu(grader: PyCanvasGrader, test_skeleton: TestSkeleton, user: User):
         elif choice == possible_opts["modify"]:
             grade_before = user.grade
             print("Enter a new grade: ")
-            user.grade = utils.choose_val(
-                1000, allow_negative=True, allow_zero=True, allow_float=True
+            user.grade = choices.choose_float(
+                1000, allow_negative=True, allow_zero=True
             )
             if user.grade != grade_before:
                 CURRENTLY_SAVED = False
@@ -384,7 +384,7 @@ def main_menu(
         start_at=len(users) + 1,
     )
 
-    choice = utils.choose_val(len(opt_list) + len(users))
+    choice = choices.choose_int(len(opt_list) + len(users))
 
     if choice <= len(users):
         utils.clear_screen()
@@ -436,7 +436,7 @@ def main_menu(
             if not CURRENTLY_SAVED:
                 print("You have unsaved changes in the current grading session.")
                 print("Would you like to save them before quitting? (y or n)")
-                if utils.choose_bool():
+                if choices.choose_bool():
                     save_state(grader, test_skeleton, users)
 
             close_program(grader)
@@ -450,10 +450,10 @@ def startup(grader: PyCanvasGrader, prefs: dict) -> (int, int):
     if isinstance(role_str, str):
         role_str = role_str.lower()
     try:
-        selected_role = utils.Enrollment[role_str]
+        selected_role = Enrollment[role_str]
     except KeyError:
-        selected_role = utils.Enrollment[
-            utils.choose(["teacher", "ta"], "Choose a class role to filter by:")
+        selected_role = Enrollment[
+            choices.choose(["teacher", "ta"], "Choose a class role to filter by:")
         ]
 
     courses = grader.courses(selected_role)
@@ -476,7 +476,7 @@ def startup(grader: PyCanvasGrader, prefs: dict) -> (int, int):
         not quickstart.get("course_id") or not quickstart.get("role")
     ):
         print("Save these settings for faster startup next time? (y or n):")
-        if utils.choose_bool():
+        if choices.choose_bool():
             with open(PREFENCES_FILE, "w") as pf:
                 prefs.update(
                     {"quickstart": {"role": selected_role.name, "course_id": course_id}}
@@ -517,7 +517,7 @@ def grade_assignment(grader: PyCanvasGrader, prefs: dict):
     ungraded_only = session.get("only_download_ungraded")
     if ungraded_only is None:
         print("Only download currently ungraded submissions? (y or n):")
-        ungraded_only = utils.choose_bool()
+        ungraded_only = choices.choose_bool()
 
     # Create users from submissions
     users = []
@@ -569,7 +569,7 @@ def grade_assignment(grader: PyCanvasGrader, prefs: dict):
         skeleton_list = TestSkeleton.parse_skeletons(
             os.path.join(os.environ.get("INSTALL_DIR"), "skeletons")
         )
-        selected_skeleton = utils.choose(
+        selected_skeleton = choices.choose(
             skeleton_list,
             "Choose a skeleton to use for grading this assignment:",
             formatter=lambda skel: skel.descriptor,
@@ -609,7 +609,7 @@ def main():
             f"{last_modified:%b %d, %Y at %I:%M%p.}",
         )
         print("Would you like to load it? (y or n)")
-        if utils.choose_bool():
+        if choices.choose_bool():
             try:
                 test_skeleton, users = load_state(
                     grader.course_id, grader.assignment_id
