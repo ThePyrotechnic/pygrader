@@ -196,7 +196,7 @@ class PyCanvasGrader:
         if grade is None:
             grade = "NaN"
         url = (
-            f"{CANVAS_API_URL}/courses/{self.course_id}/assignments/{self.assignment_id}"
+            f"{CANVAS_API_URL}/courses/{self.course_id}/assignments/{self.assignment_id}/"
             f"submissions/{user_id}/?submission[posted_grade]={grade}"
         )
 
