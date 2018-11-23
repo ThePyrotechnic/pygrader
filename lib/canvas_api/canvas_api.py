@@ -64,11 +64,14 @@ class PyCanvasGrader:
                     if len(token) > 2:
                         return token
         except FileNotFoundError:
-            print(
-                "Could not find an access.token file. You must place your Canvas OAuth token in a file named\
-             'access.token', in this directory."
-            )
-            exit(1)
+            try:
+                return os.environ["CANVAS_ACCESS_TOKEN"]
+            except KeyError:
+                print(
+                    "Could not find an access.token file. You must place your Canvas OAuth token in a file named\
+                    'access.token', in this directory."
+                )
+                exit(1)
 
     def close(self):
         self.session.close()

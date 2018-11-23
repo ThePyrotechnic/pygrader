@@ -477,7 +477,7 @@ def startup(grader: PyCanvasGrader, prefs: dict) -> (int, int):
     ):
         print("Save these settings for faster startup next time? (y or n):")
         if choices.choose_bool():
-            with open(PREFENCES_FILE, "w") as pf:
+            with open(PREFERENCES_FILE, "w") as pf:
                 prefs.update(
                     {"quickstart": {"role": selected_role.name, "course_id": course_id}}
                 )
