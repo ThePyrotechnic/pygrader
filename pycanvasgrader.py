@@ -30,7 +30,7 @@ import signal
 import sys
 from importlib import util
 from datetime import datetime
-from typing import List
+from typing import Any, Dict, List, Tuple
 
 # 3rd-party
 import toml
@@ -76,7 +76,7 @@ def init_tempdir():
         exit(1)
 
 
-def load_preferences() -> dict:
+def load_preferences() -> Dict[str, Any]:
     """
     Load preferences for grader execution
     """
@@ -348,7 +348,7 @@ def main_menu(
     global CURRENTLY_SAVED
 
     print("Main Menu\n-")
-    utils.list_choices(users)
+    choices.list_choices(users)
     print("-")
 
     options = {
@@ -374,7 +374,7 @@ def main_menu(
 
     opt_list.append(options["quit"])
 
-    utils.list_choices(
+    choices.list_choices(
         opt_list,
         (
             "Choose a user to work with that user individually,\n"
@@ -442,7 +442,7 @@ def main_menu(
             close_program(grader)
 
 
-def startup(grader: PyCanvasGrader, prefs: dict) -> (int, int):
+def startup(grader: PyCanvasGrader, prefs: dict) -> Tuple[int, int]:
     session = prefs["session"]
     quickstart = prefs["quickstart"]
 
